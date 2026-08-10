@@ -108,7 +108,7 @@ export default function ProcessingExperience({ status, trackName, onStartOver }:
               </span>
             </div>
 
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.055]">
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.055]" role="progressbar" aria-label="Processing progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
               <div className="progress-glow h-full rounded-full bg-gradient-to-r from-violet-500 via-purple-400 to-cyan-300 transition-[width] duration-700 ease-out" style={{ width: `${progress}%` }} />
             </div>
 

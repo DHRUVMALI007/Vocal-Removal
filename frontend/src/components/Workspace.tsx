@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DownloadPanel from "./DownloadPanel";
 import LyricsPanel from "./LyricsPanel";
 import StemMixer from "./StemMixer";
-import WaveformPlayer from "./WaveformPlayer";
+import StudioDeck from "./StudioDeck";
 import { getJobResults, getStemAudioUrl } from "@/lib/api";
 import { useStemMixer } from "@/hooks/useStemMixer";
 import type { JobResultsResponse, PlaybackSpeed, PracticeTarget, StemChannelState } from "@/lib/types";
@@ -20,7 +20,6 @@ const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
   hi: "Hindi",
   gu: "Gujarati",
-  ur: "Urdu",
 };
 
 const PRACTICE_LABELS: Record<PracticeTarget, string> = {
@@ -236,10 +235,10 @@ export default function Workspace({ jobId, onNewSong }: WorkspaceProps) {
         mixer.togglePlay();
       } else if (event.key === "ArrowLeft" && hasAudio) {
         event.preventDefault();
-        jumpBy(-5);
+        jumpBy(-10);
       } else if (event.key === "ArrowRight" && hasAudio) {
         event.preventDefault();
-        jumpBy(5);
+        jumpBy(10);
       } else if (event.key.toLowerCase() === "k" && hasVocals) {
         event.preventDefault();
         toggleKaraoke();
@@ -290,33 +289,52 @@ export default function Workspace({ jobId, onNewSong }: WorkspaceProps) {
   const transcriptLanguageUsed = typeof results.metadata.transcript_language_used === "string" ? results.metadata.transcript_language_used : null;
   const languageProbability = typeof results.metadata.language_probability === "number" ? results.metadata.language_probability : null;
   const effectiveLanguage = transcriptLanguageUsed || detectedLanguage || (requestedLanguage !== "auto" ? requestedLanguage : null);
-  const languageLabel = effectiveLanguage ? (LANGUAGE_LABELS[effectiveLanguage] || effectiveLanguage.toUpperCase()) : "Auto detect";
-  const originalLanguageLabel = detectedLanguage ? (LANGUAGE_LABELS[detectedLanguage] || detectedLanguage.toUpperCase()) : null;
-  const hasOriginalTranscript = Boolean(results.lyrics?.original_lines?.length);
+  // Older sessions can contain an ambiguous auto-detected language code. The
+  // product preference is Hindi display, so never surface that alternate script.
+  const displayLanguage = effectiveLanguage === "ur" ? "hi" : effectiveLanguage;
+  const languageLabel = displayLanguage ? (LANGUAGE_LABELS[displayLanguage] || "Hindi") : "Auto detect";
 
   return (
     <div className="space-y-4 sm:space-y-5 xl:space-y-6">
-      <section className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-violet-500/[0.09] via-[#0b101b] to-cyan-400/[0.04] p-4 shadow-2xl sm:rounded-[2rem] sm:p-6 xl:p-7">
-        <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-violet-500/10 blur-3xl" aria-hidden="true" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      {hasAudio && (
+        <StudioDeck
+          trackName={trackName}
+          practiceLabel={PRACTICE_LABELS[practiceTarget]}
+          loaded={mixer.loaded}
+          loadError={mixer.loadError}
+          isPlaying={mixer.isPlaying}
+          currentTime={mixer.currentTime}
+          duration={duration}
+          playbackSpeed={playbackSpeed}
+          loopRange={loopRange}
+          waveformUrl={waveformUrl}
+          onTogglePlay={mixer.togglePlay}
+          onJump={jumpBy}
+          onSeek={mixer.seek}
+          onSpeedChange={setPlaybackSpeed}
+          onLoopFromNow={loopFromNow}
+          onClearLoop={() => setLoopRange(null)}
+        />
+      )}
+
+      <section className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-r from-violet-500/[0.055] via-[#0b101b] to-cyan-400/[0.025] p-4 shadow-xl sm:rounded-[1.75rem] sm:p-5">
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/[0.15] bg-emerald-300/[0.055] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/[0.12] bg-emerald-300/[0.04] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.13em] text-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Studio live
               </span>
-              <span className="rounded-full border border-violet-400/10 bg-violet-500/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.11em] text-violet-100/75">{PRACTICE_LABELS[practiceTarget]}</span>
               {hasLyrics && (
-                <span className="rounded-full border border-cyan-300/10 bg-cyan-300/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.11em] text-cyan-100/80">
-                  Literal · {languageLabel}
+                <span className="rounded-full border border-cyan-300/10 bg-cyan-300/[0.035] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.11em] text-cyan-100/80">
+                  Literal transcript · {languageLabel}
                 </span>
               )}
             </div>
-            <h1 className="mt-4 truncate text-xl font-bold tracking-tight text-white sm:text-3xl xl:text-4xl" title={trackName}>{trackName}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 sm:gap-x-5">
               <span>{formatTime(duration)} duration</span>
               <span>{channels.length} audio {channels.length === 1 ? "output" : "outputs"}</span>
               <span>{hasLyrics ? `${results.lyrics?.lines.length ?? 0} lyric lines` : "No lyrics requested"}</span>
-              {hasOriginalTranscript && <span className="text-amber-200/60">Original {originalLanguageLabel || "auto"} transcript preserved</span>}
+              <span>{PRACTICE_LABELS[practiceTarget]}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -326,64 +344,6 @@ export default function Workspace({ jobId, onNewSong }: WorkspaceProps) {
           </div>
         </div>
       </section>
-
-      {hasAudio && (
-        <section className="dj-transport rounded-2xl border border-white/[0.09] bg-[#090d16]/95 p-3 shadow-2xl sm:rounded-[2rem] sm:p-5 xl:p-6">
-          <div className="grid gap-4 xl:grid-cols-[auto_minmax(0,1fr)_auto] xl:items-center">
-            <div className="flex items-center justify-center gap-2 sm:justify-start">
-              <button type="button" onClick={() => jumpBy(-10)} disabled={!mixer.loaded} className="transport-secondary" aria-label="Go back 10 seconds">-10</button>
-              <button
-                type="button"
-                onClick={mixer.togglePlay}
-                disabled={!mixer.loaded}
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-purple-700 text-white shadow-[0_12px_36px_rgba(124,92,255,.28)] transition hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-40 xl:h-16 xl:w-16"
-                aria-label={mixer.isPlaying ? "Pause session" : "Play session"}
-              >
-                <TransportIcon playing={mixer.isPlaying} />
-              </button>
-              <button type="button" onClick={() => jumpBy(10)} disabled={!mixer.loaded} className="transport-secondary" aria-label="Go forward 10 seconds">+10</button>
-            </div>
-
-            <div className="min-w-0 rounded-2xl border border-white/[0.05] bg-black/15 px-4 py-3 text-center xl:text-left">
-              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 xl:justify-between">
-                <p className="truncate text-sm font-semibold text-white">{mixer.isPlaying ? "Deck playing" : mixer.loaded ? "Deck ready" : "Loading audio stems"}</p>
-                <p className="font-mono text-xs tabular-nums text-slate-400">{formatTime(mixer.currentTime)} / {formatTime(duration)}</p>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                <div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-purple-400 to-cyan-300 transition-[width] duration-100" style={{ width: `${duration > 0 ? Math.min(100, (mixer.currentTime / duration) * 100) : 0}%` }} />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-2 xl:justify-end">
-              <div className="flex items-center rounded-xl border border-white/[0.06] bg-black/10 p-1" role="group" aria-label="Playback speed">
-                {([0.5, 0.75, 1, 1.25] as PlaybackSpeed[]).map((speed) => (
-                  <button key={speed} type="button" onClick={() => setPlaybackSpeed(speed)} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${playbackSpeed === speed ? "bg-white/[0.09] text-white" : "text-slate-600 hover:text-slate-300"}`}>{speed}×</button>
-                ))}
-              </div>
-              <button type="button" onClick={() => loopFromNow(4)} className="practice-control">Loop 4s</button>
-              <button type="button" onClick={() => loopFromNow(8)} className="practice-control">8s</button>
-              <button type="button" onClick={() => loopFromNow(16)} className="practice-control">16s</button>
-              {loopRange && <button type="button" onClick={() => setLoopRange(null)} className="practice-control text-red-300">Clear</button>}
-            </div>
-          </div>
-          <div className="mt-3 hidden items-center justify-between border-t border-white/5 pt-3 text-[10px] text-slate-700 lg:flex">
-            <span>Keyboard: Space play/pause · ←/→ 5 sec · K vocal practice · L loop</span>
-            <span>{loopRange ? `Loop ${formatTime(loopRange.start)}–${formatTime(loopRange.end)}` : `Master ${Math.round(masterVolume * 100)}% · ${playbackSpeed}×`}</span>
-          </div>
-          {mixer.loadError && <p className="mt-4 rounded-xl border border-red-400/[0.15] bg-red-400/[0.05] px-3 py-2 text-xs text-red-300">{mixer.loadError}</p>}
-        </section>
-      )}
-
-      {waveformUrl && (
-        <WaveformPlayer
-          url={waveformUrl}
-          currentTime={mixer.currentTime}
-          duration={duration}
-          isPlaying={mixer.isPlaying}
-          onSeek={mixer.seek}
-          loopRange={loopRange}
-        />
-      )}
 
       {(hasAudio || hasLyrics) && (
         <div className={`grid items-start gap-4 sm:gap-5 xl:gap-6 ${hasAudio && hasLyrics ? "xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,.72fr)] 2xl:grid-cols-[minmax(0,1.6fr)_minmax(430px,.7fr)]" : ""}`}>
@@ -402,7 +362,6 @@ export default function Workspace({ jobId, onNewSong }: WorkspaceProps) {
             <div className="xl:sticky xl:top-24">
               <LyricsPanel
                 lines={results.lyrics.lines || []}
-                originalLines={results.lyrics.original_lines || []}
                 currentTime={mixer.currentTime}
                 karaokeMode={karaokeMode}
                 vocalsMuted={vocalsMuted}
@@ -412,7 +371,6 @@ export default function Workspace({ jobId, onNewSong }: WorkspaceProps) {
                 hasVocals={hasVocals}
                 hasInstrumental={hasInstrumental}
                 languageLabel={languageLabel}
-                originalLanguageLabel={originalLanguageLabel}
                 languageConfidence={languageProbability}
                 practiceLabel={PRACTICE_LABELS[practiceTarget]}
                 onSeek={mixer.seek}

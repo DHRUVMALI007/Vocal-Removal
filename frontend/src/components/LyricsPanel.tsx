@@ -6,7 +6,6 @@ import { PLAYBACK_SPEEDS } from "@/lib/types";
 
 interface LyricsPanelProps {
   lines: LyricLine[];
-  originalLines?: LyricLine[];
   currentTime: number;
   karaokeMode: boolean;
   vocalsMuted: boolean;
@@ -16,7 +15,6 @@ interface LyricsPanelProps {
   hasVocals: boolean;
   hasInstrumental: boolean;
   languageLabel?: string;
-  originalLanguageLabel?: string | null;
   languageConfidence?: number | null;
   practiceLabel?: string;
   onSeek: (time: number) => void;
@@ -34,7 +32,6 @@ function formatTime(time: number) {
 
 export default function LyricsPanel({
   lines,
-  originalLines = [],
   currentTime,
   karaokeMode,
   vocalsMuted,
@@ -44,7 +41,6 @@ export default function LyricsPanel({
   hasVocals,
   hasInstrumental,
   languageLabel,
-  originalLanguageLabel,
   languageConfidence,
   practiceLabel,
   onSeek,
@@ -58,9 +54,7 @@ export default function LyricsPanel({
   const [pendingLoopStart, setPendingLoopStart] = useState<number | null>(null);
   const [followPlayback, setFollowPlayback] = useState(true);
   const [largeLyrics, setLargeLyrics] = useState(true);
-  const [showOriginal, setShowOriginal] = useState(false);
-
-  const displayedLines = showOriginal && originalLines.length > 0 ? originalLines : lines;
+  const displayedLines = lines;
   const activeIndex = hasAudio
     ? displayedLines.findIndex((line) => currentTime >= line.start && currentTime < line.end)
     : -1;
@@ -80,7 +74,7 @@ export default function LyricsPanel({
   useEffect(() => {
     if (!followPlayback) return;
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeIndex, followPlayback, showOriginal]);
+  }, [activeIndex, followPlayback]);
 
   const handleLineClick = (line: LyricLine) => {
     if (!hasAudio) return;
@@ -115,7 +109,7 @@ export default function LyricsPanel({
               <span className="rounded-full border border-emerald-300/10 bg-emerald-300/[0.035] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-100/70">Literal ASR</span>
               {languageLabel && (
                 <span className="rounded-full border border-cyan-300/10 bg-cyan-300/[0.04] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-100/75">
-                  {showOriginal && originalLanguageLabel ? originalLanguageLabel : languageLabel}{confidence !== null && !showOriginal ? ` · ${confidence}%` : ""}
+                  {languageLabel}{confidence !== null ? ` · ${confidence}%` : ""}
                 </span>
               )}
             </div>
@@ -140,18 +134,6 @@ export default function LyricsPanel({
           </div>
         </div>
 
-        {originalLines.length > 0 && (
-          <div className="mt-4 flex flex-col gap-2 rounded-xl border border-amber-300/10 bg-amber-300/[0.025] p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold text-amber-100">Original auto transcript was preserved</p>
-              <p className="mt-0.5 text-[10px] leading-4 text-slate-600">Auto detected {originalLanguageLabel || "Urdu"}; the preferred-script result is a second literal ASR decode of the same vocals.</p>
-            </div>
-            <div className="flex rounded-lg border border-white/[0.06] bg-black/10 p-1">
-              <button type="button" onClick={() => setShowOriginal(false)} className={`rounded-md px-2.5 py-1.5 text-[10px] font-semibold ${!showOriginal ? "bg-white/[0.08] text-white" : "text-slate-600"}`}>Preferred</button>
-              <button type="button" onClick={() => setShowOriginal(true)} className={`rounded-md px-2.5 py-1.5 text-[10px] font-semibold ${showOriginal ? "bg-white/[0.08] text-white" : "text-slate-600"}`}>Original</button>
-            </div>
-          </div>
-        )}
 
         {hasAudio && (
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -242,7 +224,7 @@ export default function LyricsPanel({
             const distance = activeIndex >= 0 ? Math.abs(index - activeIndex) : 99;
             return (
               <button
-                key={`${line.start}-${index}-${showOriginal ? "original" : "display"}`}
+                key={`${line.start}-${index}`}
                 ref={active ? activeRef : undefined}
                 type="button"
                 disabled={!hasAudio}

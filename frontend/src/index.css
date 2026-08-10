@@ -287,7 +287,23 @@ input:focus-visible,
 }
 
 .progress-glow {
+  position: relative;
+  overflow: hidden;
   box-shadow: 0 0 20px rgba(103, 232, 249, 0.22), 0 0 12px rgba(139, 92, 246, 0.32);
+}
+
+.progress-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 38%;
+  transform: translateX(-160%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  animation: progress-scan 1.65s ease-in-out infinite;
+}
+
+@keyframes progress-scan {
+  to { transform: translateX(420%) skewX(-18deg); }
 }
 
 .lyrics-scroll {
@@ -440,14 +456,14 @@ input:focus-visible,
 
 /* Wide desktop DJ workspace */
 .dj-console,
-.dj-transport,
+.studio-deck,
 .spotify-lyrics-panel {
   position: relative;
   isolation: isolate;
 }
 
 .dj-console::before,
-.dj-transport::before {
+.studio-deck::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -505,5 +521,144 @@ input:focus-visible,
 
   .dj-console {
     min-height: 650px;
+  }
+}
+
+
+/* Large performance deck and reliable seeking controls */
+.studio-deck {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(124, 92, 255, 0.09), transparent 25rem),
+    radial-gradient(circle at 88% 0%, rgba(34, 211, 238, 0.055), transparent 24rem),
+    #080c15;
+}
+
+.studio-deck::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -80px 120px rgba(0, 0, 0, 0.2);
+}
+
+.transport-secondary-large {
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+}
+
+.deck-scrubber {
+  --deck-progress: 0%;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 24px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.deck-scrubber:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.deck-scrubber::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #7c5cff 0%, #a78bfa var(--deck-progress), rgba(255, 255, 255, 0.075) var(--deck-progress), rgba(255, 255, 255, 0.075) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.deck-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -5.5px;
+  border: 3px solid #090d16;
+  border-radius: 999px;
+  background: #a5f3fc;
+  box-shadow: 0 0 0 1px rgba(165, 243, 252, 0.35), 0 0 20px rgba(103, 232, 249, 0.35);
+}
+
+.deck-scrubber::-moz-range-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.deck-scrubber::-moz-range-progress {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7c5cff, #a78bfa);
+}
+
+.deck-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 3px solid #090d16;
+  border-radius: 999px;
+  background: #a5f3fc;
+  box-shadow: 0 0 0 1px rgba(165, 243, 252, 0.35), 0 0 20px rgba(103, 232, 249, 0.35);
+}
+
+.deck-waveform-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.006)),
+    rgba(0, 0, 0, 0.14);
+}
+
+.deck-waveform-seek {
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.deck-waveform-seek:hover {
+  border-color: rgba(167, 139, 250, 0.2);
+  background: rgba(0, 0, 0, 0.23);
+}
+
+@media (min-width: 1280px) {
+  .studio-deck {
+    min-height: 540px;
+  }
+
+  .transport-secondary-large {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  .studio-deck {
+    min-height: 590px;
+  }
+
+  .transport-secondary-large {
+    width: 70px;
+    height: 70px;
+  }
+}
+
+@media (max-width: 639px) {
+  .studio-deck {
+    min-height: 0;
+  }
+
+  .transport-secondary-large {
+    width: 50px;
+    height: 50px;
+  }
+
+  .deck-scrubber {
+    height: 30px;
   }
 }

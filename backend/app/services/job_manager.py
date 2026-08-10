@@ -257,57 +257,44 @@ class JobManager:
             meta.message = f"Literal transcription · {language_label}"
             self.save_metadata(meta)
 
-            # First pass is always the literal ASR result. Whisper is explicitly
-            # called with task=transcribe, so no translation/grammar cleanup is
-            # performed by this application.
+            # First pass is always literal ASR. Whisper is explicitly called with
+            # task=transcribe, so this application does not translate, rewrite,
+            # summarize, or grammar-correct the recognized words.
             transcription = await self._transcriber.transcribe(vocals_path, language=language)
             display_transcription = transcription
-            original_lines = []
-            original_files: dict[str, str] = {}
 
             meta.detected_language = transcription.language
             meta.language_probability = transcription.language_probability
             meta.transcript_language_used = language or transcription.language
 
-            # Hindi and Urdu speech can be ambiguous to automatic language
-            # detection. If Auto specifically comes back as Urdu and the user
-            # asked for an Indic script fallback, keep the raw auto transcript
-            # and re-decode the SAME audio with the requested language token.
-            # This is speech recognition again, not translation or paraphrasing.
-            fallback = meta.urdu_script_fallback
-            should_redecode = (
-                language is None
-                and transcription.language == "ur"
-                and fallback in {"hi", "gu"}
-            )
-            if should_redecode:
-                fallback_label = "Hindi / Devanagari" if fallback == "hi" else "Gujarati"
-                meta.message = f"Urdu detected · re-decoding as {fallback_label}"
+            # Auto detection can be ambiguous for closely related Hindustani
+            # speech. Product behavior is intentionally Hindi-first: if that
+            # alternate language code is detected, perform a second literal ASR
+            # pass with the Hindi token and never expose the first-pass script.
+            force_hindi = language is None and transcription.language == "ur"
+            if force_hindi:
+                meta.message = "Ambiguous speech detected · preparing Hindi-script lyrics"
                 meta.progress = max(meta.progress, 86.0)
+                meta.transcript_language_used = "hi"
                 self.save_metadata(meta)
                 try:
-                    fallback_transcription = await self._transcriber.transcribe(
+                    hindi_transcription = await self._transcriber.transcribe(
                         vocals_path,
-                        language=fallback,
+                        language="hi",
                     )
-                    if fallback_transcription.lines:
-                        original_lines = transcription.lines
-                        display_transcription = fallback_transcription
-                        meta.transcript_language_used = fallback
-                    else:
+                    display_transcription = hindi_transcription if hindi_transcription.lines else None
+                    if display_transcription is None:
                         logger.warning(
-                            "Preferred-script re-decode returned no lines for job %s; keeping original transcript",
+                            "Hindi-script re-decode returned no lines for job %s",
                             job_id,
                         )
                 except Exception:
-                    # Script preference is optional. Never throw away a valid raw
-                    # transcript because a second preference decode failed.
-                    logger.exception(
-                        "Preferred-script re-decode failed for job %s; keeping original transcript",
-                        job_id,
-                    )
+                    # Never fall back to displaying the alternate script. A job can
+                    # still complete with stems if the Hindi re-decode fails.
+                    logger.exception("Hindi-script re-decode failed for job %s", job_id)
+                    display_transcription = None
 
-            lines = display_transcription.lines
+            lines = display_transcription.lines if display_transcription is not None else []
 
             meta.step = ProcessingStep.LYRICS
             meta.message = "Preparing synchronized literal lyrics"
@@ -315,18 +302,16 @@ class JobManager:
             self.save_metadata(meta)
 
             files = export_lyrics(lines, job_path) if lines else {}
-            if original_lines:
-                original_files = export_lyrics(original_lines, job_path, basename="lyrics_original")
 
             meta.lyrics = LyricsData(
                 lines=lines,
-                original_lines=original_lines,
+                original_lines=[],
                 txt_file=files.get("txt_file"),
                 srt_file=files.get("srt_file"),
                 lrc_file=files.get("lrc_file"),
-                original_txt_file=original_files.get("txt_file"),
-                original_srt_file=original_files.get("srt_file"),
-                original_lrc_file=original_files.get("lrc_file"),
+                original_txt_file=None,
+                original_srt_file=None,
+                original_lrc_file=None,
             )
             meta.step = ProcessingStep.FINALIZE
             meta.message = "Finalizing"
@@ -428,7 +413,7 @@ class JobManager:
             meta.requested_outputs = list(selected.outputs)
             meta.include_lyrics = selected.include_lyrics
             meta.requested_language = selected.transcription_language
-            meta.urdu_script_fallback = selected.urdu_script_fallback
+            meta.urdu_script_fallback = "hi" if selected.transcription_language == "auto" else "none"
             meta.detected_language = None
             meta.language_probability = None
             meta.transcript_language_used = None
@@ -463,12 +448,6 @@ class JobManager:
                 urls["lyrics_srt"] = f"/api/jobs/{job_id}/download/{meta.lyrics.srt_file}"
             if meta.lyrics.lrc_file:
                 urls["lyrics_lrc"] = f"/api/jobs/{job_id}/download/{meta.lyrics.lrc_file}"
-            if meta.lyrics.original_txt_file:
-                urls["lyrics_original_txt"] = f"/api/jobs/{job_id}/download/{meta.lyrics.original_txt_file}"
-            if meta.lyrics.original_srt_file:
-                urls["lyrics_original_srt"] = f"/api/jobs/{job_id}/download/{meta.lyrics.original_srt_file}"
-            if meta.lyrics.original_lrc_file:
-                urls["lyrics_original_lrc"] = f"/api/jobs/{job_id}/download/{meta.lyrics.original_lrc_file}"
         urls["all_zip"] = f"/api/jobs/{job_id}/download/all.zip"
         return urls
 
@@ -488,9 +467,6 @@ class JobManager:
                 meta.lyrics.txt_file,
                 meta.lyrics.srt_file,
                 meta.lyrics.lrc_file,
-                meta.lyrics.original_txt_file,
-                meta.lyrics.original_srt_file,
-                meta.lyrics.original_lrc_file,
             ):
                 if filename:
                     allowed.add(filename)
@@ -513,9 +489,6 @@ class JobManager:
                     meta.lyrics.txt_file,
                     meta.lyrics.srt_file,
                     meta.lyrics.lrc_file,
-                    meta.lyrics.original_txt_file,
-                    meta.lyrics.original_srt_file,
-                    meta.lyrics.original_lrc_file,
                 ]:
                     if lf and (job_path / lf).exists():
                         files.append(job_path / lf)

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import type { PracticeTarget, StemChannelState } from "@/lib/types";
 
 interface StemMixerProps {
@@ -79,7 +80,6 @@ export default function StemMixer({
         </div>
         <button type="button" onClick={resetSound} className="btn-secondary self-start px-3 py-2 text-xs lg:self-auto">Reset console</button>
       </div>
-
       <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="rounded-2xl border border-white/[0.06] bg-black/15 p-3 sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -95,11 +95,10 @@ export default function StemMixer({
                 key={target}
                 type="button"
                 onClick={() => onPracticeTarget(target)}
-                className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
-                  practiceTarget === target
-                    ? "border-violet-400/25 bg-violet-500/10 text-violet-100 shadow-[0_0_22px_rgba(124,92,255,.08)]"
-                    : "border-white/[0.06] bg-white/[0.02] text-slate-500 hover:border-white/[0.12] hover:text-slate-200"
-                }`}
+                className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${practiceTarget === target
+                  ? "border-violet-400/25 bg-violet-500/10 text-violet-100 shadow-[0_0_22px_rgba(124,92,255,.08)]"
+                  : "border-white/[0.06] bg-white/[0.02] text-slate-500 hover:border-white/[0.12] hover:text-slate-200"
+                  }`}
               >
                 {PRACTICE_LABELS[target]}
               </button>

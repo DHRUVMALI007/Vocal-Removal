@@ -7,7 +7,7 @@ AI-powered music vocal removal, stem separation, lyrics transcription, and karao
 - **Upload** audio (MP3, WAV, FLAC, M4A, OGG, AAC)
 - **AI stem separation** via HTDemucs (vocals, drums, bass, other + instrumental mix)
 - **Literal multilingual lyrics transcription** from the isolated vocal stem using faster-whisper (`task=transcribe`, no translation/semantic rewrite)
-- **Language hints** for Auto, English, Hindi, and Gujarati, plus optional Auto→Hindi/Gujarati re-decode when Urdu is detected
+- **Language hints** for Auto, English, Hindi, and Gujarati, with Hindi-safe Auto fallback for ambiguous Hindustani speech
 - **Spotify-style synchronized lyrics** with follow mode, large active lyrics, click-to-seek, and original/preferred transcript switching
 - **Desktop DJ stem console** — per-channel mute/cue, gain, stereo pan, 3-band EQ, master fader, and live master meter
 - **Instrument practice targets** — sing, drums, bass, or guitar/keys (`other`) while the remaining band and lyrics stay synchronized
