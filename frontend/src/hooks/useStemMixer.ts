@@ -57,30 +57,36 @@ export function useStemMixer({ channels, playbackRate = 1 }: UseStemMixerOptions
 
   const loadBuffers = useCallback(async () => {
     const context = getCtx();
-    let maxDuration = 0;
-    let loadedCount = 0;
+    const targets = channelsRef.current.filter((channel) => Boolean(channel.url));
     buffersRef.current.clear();
     setLoaded(false);
     setLoadError(null);
 
-    for (const channel of channelsRef.current) {
-      if (!channel.url) continue;
-      try {
-        const response = await fetch(channel.url);
-        if (!response.ok) continue;
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = await context.decodeAudioData(arrayBuffer);
-        buffersRef.current.set(channel.name, buffer);
-        maxDuration = Math.max(maxDuration, buffer.duration);
-        loadedCount += 1;
-      } catch {
-        // Keep loading other stems if one output is unavailable.
-      }
-    }
+    // Fetch and decode stems in parallel. A full-stems job otherwise waits for
+    // each WAV to finish before the next one even starts loading.
+    const decoded = await Promise.all(
+      targets.map(async (channel) => {
+        try {
+          const response = await fetch(channel.url);
+          if (!response.ok) return null;
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = await context.decodeAudioData(arrayBuffer);
+          return { name: channel.name, buffer };
+        } catch {
+          return null;
+        }
+      }),
+    );
 
+    const available = decoded.filter(
+      (item): item is { name: string; buffer: AudioBuffer } => item !== null,
+    );
+    available.forEach(({ name, buffer }) => buffersRef.current.set(name, buffer));
+
+    const maxDuration = available.reduce((max, item) => Math.max(max, item.buffer.duration), 0);
     setDuration(maxDuration);
-    setLoaded(loadedCount > 0);
-    if (loadedCount === 0 && channelsRef.current.length > 0) {
+    setLoaded(available.length > 0);
+    if (available.length === 0 && targets.length > 0) {
       setLoadError("Audio stems could not be loaded. Check that the backend files are still available.");
     }
   }, [channelUrlKey, getCtx]);

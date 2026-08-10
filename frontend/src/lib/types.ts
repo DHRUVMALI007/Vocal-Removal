@@ -3,10 +3,12 @@ export type JobStatus = "created" | "queued" | "processing" | "completed" | "fai
 export type ProcessingStep = "upload" | "normalize" | "separate" | "instrumental" | "transcribe" | "lyrics" | "finalize";
 
 export type OutputStem = "vocals" | "drums" | "bass" | "other" | "instrumental";
+export type TranscriptionLanguage = "auto" | "en" | "hi" | "gu";
 
 export interface SeparationOptions {
   outputs: OutputStem[];
   include_lyrics: boolean;
+  transcription_language: TranscriptionLanguage;
 }
 
 export interface StemInfo {
@@ -57,5 +59,5 @@ export interface StemChannelState {
   url: string;
 }
 
-export const PLAYBACK_SPEEDS = [0.5, 0.75, 1] as const;
+export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25] as const;
 export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];

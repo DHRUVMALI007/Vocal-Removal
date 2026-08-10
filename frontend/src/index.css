@@ -341,3 +341,99 @@ input:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Studio transport and preset controls */
+.transport-secondary,
+.mobile-transport-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.transport-secondary {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.mobile-transport-button {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+}
+
+.transport-secondary:hover,
+.mobile-transport-button:hover {
+  border-color: rgba(167, 139, 250, 0.24);
+  background: rgba(139, 92, 246, 0.08);
+  color: #ddd6fe;
+}
+
+.transport-secondary:active,
+.mobile-transport-button:active {
+  transform: scale(0.96);
+}
+
+.transport-secondary:disabled,
+.mobile-transport-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.mixer-preset {
+  min-height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.026);
+  padding: 0.45rem 0.7rem;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 650;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.mixer-preset:hover {
+  border-color: rgba(167, 139, 250, 0.22);
+  background: rgba(139, 92, 246, 0.07);
+  color: #ede9fe;
+}
+
+@media (max-width: 639px) {
+  .processing-orbit {
+    width: 220px;
+    height: 220px;
+  }
+
+  .processing-core {
+    width: 124px;
+    height: 124px;
+    border-radius: 36px;
+  }
+
+  .processing-note {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .processing-note-one {
+    right: 5px;
+    top: 40px;
+  }
+
+  .processing-note-two {
+    left: 6px;
+    bottom: 36px;
+  }
+
+  .music-grid {
+    background-size: 34px 34px;
+  }
+}

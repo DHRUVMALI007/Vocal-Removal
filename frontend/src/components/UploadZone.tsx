@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { OutputStem, SeparationOptions } from "@/lib/types";
+import type { OutputStem, SeparationOptions, TranscriptionLanguage } from "@/lib/types";
 
 interface UploadZoneProps {
   onUpload: (file: File, options: SeparationOptions) => void;
@@ -21,6 +21,13 @@ const OUTPUTS: Array<{ name: OutputStem; label: string; help: string; accent: st
 
 const DEFAULT_OUTPUTS: OutputStem[] = ["vocals", "instrumental"];
 
+const LANGUAGES: Array<{ code: TranscriptionLanguage; label: string; native: string; help: string }> = [
+  { code: "auto", label: "Auto detect", native: "Smart", help: "Best for mixed or unknown language" },
+  { code: "en", label: "English", native: "English", help: "Skip detection for English songs" },
+  { code: "hi", label: "Hindi", native: "हिन्दी", help: "Hindi and Hinglish-focused songs" },
+  { code: "gu", label: "Gujarati", native: "ગુજરાતી", help: "Gujarati-focused songs" },
+];
+
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -32,6 +39,7 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
   const [error, setError] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<OutputStem[]>(DEFAULT_OUTPUTS);
   const [includeLyrics, setIncludeLyrics] = useState(true);
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>("auto");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const validate = useCallback(
@@ -93,7 +101,11 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
       return;
     }
     setError(null);
-    onUpload(pendingFile, { outputs, include_lyrics: includeLyrics });
+    onUpload(pendingFile, {
+      outputs,
+      include_lyrics: includeLyrics,
+      transcription_language: includeLyrics ? transcriptionLanguage : "auto",
+    });
   };
 
   const selectionCount = outputs.length + (includeLyrics ? 1 : 0);
@@ -185,6 +197,43 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
               />
             </div>
           </label>
+        </div>
+
+        <div className={`mt-5 rounded-2xl border p-4 transition ${includeLyrics ? "border-cyan-300/10 bg-cyan-300/[0.025]" : "border-white/5 bg-black/10 opacity-55"}`}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Lyric language</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Choose a language when you know it. Auto detect still works for mixed or unknown songs.</p>
+            </div>
+            {includeLyrics && transcriptionLanguage !== "auto" && (
+              <span className="w-fit rounded-full border border-emerald-300/10 bg-emerald-300/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200">
+                Faster hint
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {LANGUAGES.map((language) => {
+              const active = transcriptionLanguage === language.code;
+              return (
+                <button
+                  key={language.code}
+                  type="button"
+                  disabled={disabled || !includeLyrics}
+                  onClick={() => setTranscriptionLanguage(language.code)}
+                  className={`min-w-0 rounded-xl border px-3 py-3 text-left transition ${
+                    active
+                      ? "border-violet-400/25 bg-violet-500/[0.09] text-white"
+                      : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-white/[0.12] hover:bg-white/[0.04]"
+                  } disabled:pointer-events-none`}
+                >
+                  <span className="block truncate text-sm font-semibold">{language.native}</span>
+                  <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.11em] text-slate-600">{language.label}</span>
+                  <span className="mt-2 block text-[11px] leading-4 text-slate-600">{language.help}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <p className="mt-5 text-xs leading-5 text-slate-600">

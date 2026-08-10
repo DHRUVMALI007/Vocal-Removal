@@ -87,18 +87,18 @@ function SiteHeader({ pathname, navigate }: { pathname: string; navigate: (path:
   const inStudio = pathname.startsWith("/studio");
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 bg-[#070910]/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] max-w-7xl items-center gap-5 px-4 sm:px-6 lg:px-8">
-        <NavLink href="/" navigate={navigate} className="flex items-center gap-3 text-white">
+      <div className="mx-auto flex h-[64px] max-w-7xl items-center gap-2 px-3 sm:h-[72px] sm:gap-4 sm:px-6 lg:px-8">
+        <NavLink href="/" navigate={navigate} className="flex shrink-0 items-center gap-3 text-white">
           <BrandMark />
-          <span className="text-base font-bold tracking-tight sm:text-lg">Vocal Manager</span>
+          <span className="hidden text-base font-bold tracking-tight sm:inline sm:text-lg">Vocal Manager</span>
         </NavLink>
 
-        <nav className="ml-auto flex items-center gap-1 rounded-full border border-white/5 bg-white/[0.025] p-1 text-sm">
+        <nav className="ml-auto flex min-w-0 items-center gap-0.5 rounded-full border border-white/5 bg-white/[0.025] p-1 text-xs sm:gap-1 sm:text-sm">
           <NavLink
             href="/"
             active={pathname === "/"}
             navigate={navigate}
-            className={`rounded-full px-3 py-2 ${pathname === "/" ? "bg-white/[0.08]" : ""}`}
+            className={`rounded-full px-2.5 py-2 sm:px-3 ${pathname === "/" ? "bg-white/[0.08]" : ""}`}
           >
             Home
           </NavLink>
@@ -106,7 +106,7 @@ function SiteHeader({ pathname, navigate }: { pathname: string; navigate: (path:
             href="/studio"
             active={inStudio}
             navigate={navigate}
-            className={`rounded-full px-3 py-2 ${inStudio ? "bg-white/[0.08]" : ""}`}
+            className={`rounded-full px-2.5 py-2 sm:px-3 ${inStudio ? "bg-white/[0.08]" : ""}`}
           >
             Studio
           </NavLink>
@@ -114,14 +114,14 @@ function SiteHeader({ pathname, navigate }: { pathname: string; navigate: (path:
             href="/about"
             active={pathname === "/about"}
             navigate={navigate}
-            className={`hidden rounded-full px-3 py-2 sm:block ${pathname === "/about" ? "bg-white/[0.08]" : ""}`}
+            className={`hidden rounded-full px-3 py-2 md:block ${pathname === "/about" ? "bg-white/[0.08]" : ""}`}
           >
             About
           </NavLink>
         </nav>
 
         {!inStudio && (
-          <button type="button" onClick={() => navigate("/studio")} className="btn-primary hidden sm:inline-flex">
+          <button type="button" onClick={() => navigate("/studio")} className="btn-primary hidden lg:inline-flex">
             Open Studio
           </button>
         )}
@@ -330,7 +330,7 @@ function StudioPage({ routeJobId, navigate }: { routeJobId?: string; navigate: (
         const final = await pollUntilComplete(
           routeJobId,
           (status) => active && setProgress(status),
-          1800,
+          1200,
           10 * 60 * 1000,
           controller.signal,
         );
@@ -369,7 +369,16 @@ function StudioPage({ routeJobId, navigate }: { routeJobId?: string; navigate: (
     setPhase("starting");
 
     try {
-      const { job_id } = await createJob(file);
+      const { job_id } = await createJob(file, (percent) => {
+        setProgress({
+          job_id: "pending",
+          status: "created",
+          progress: Math.max(2, Math.min(9, 2 + percent * 0.07)),
+          step: "upload",
+          message: `Uploading your track · ${percent}%`,
+          error: null,
+        });
+      });
       setProgress({
         job_id,
         status: "queued",
@@ -397,7 +406,7 @@ function StudioPage({ routeJobId, navigate }: { routeJobId?: string; navigate: (
 
   if (phase === "workspace" && routeJobId) {
     return (
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <section className="mx-auto max-w-7xl px-3 py-5 pb-24 sm:px-6 sm:py-8 sm:pb-10 lg:px-8 lg:py-10">
         <Workspace jobId={routeJobId} onNewSong={startOver} />
       </section>
     );

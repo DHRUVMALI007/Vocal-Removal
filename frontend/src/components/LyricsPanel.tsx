@@ -14,6 +14,8 @@ interface LyricsPanelProps {
   hasAudio: boolean;
   hasVocals: boolean;
   hasInstrumental: boolean;
+  languageLabel?: string;
+  languageConfidence?: number | null;
   onSeek: (time: number) => void;
   onSetLoop: (range: { start: number; end: number } | null) => void;
   onToggleKaraoke: () => void;
@@ -37,6 +39,8 @@ export default function LyricsPanel({
   hasAudio,
   hasVocals,
   hasInstrumental,
+  languageLabel,
+  languageConfidence,
   onSeek,
   onSetLoop,
   onToggleKaraoke,
@@ -51,9 +55,13 @@ export default function LyricsPanel({
     ? lines.findIndex((line) => currentTime >= line.start && currentTime < line.end)
     : -1;
   const activeLine = activeIndex >= 0 ? lines[activeIndex] : null;
+  const confidence =
+    typeof languageConfidence === "number" && languageConfidence >= 0 && languageConfidence <= 1
+      ? Math.round(languageConfidence * 100)
+      : null;
 
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeIndex]);
 
   const handleLineClick = (line: LyricLine) => {
@@ -80,11 +88,18 @@ export default function LyricsPanel({
   };
 
   return (
-    <section className="rounded-[2rem] border border-white/[0.08] bg-[#0d111d]/[0.85] p-5 shadow-xl sm:p-6">
+    <section className="rounded-2xl border border-white/[0.08] bg-[#0d111d]/[0.85] p-4 shadow-xl sm:rounded-[2rem] sm:p-6">
       <div className="flex flex-col gap-4 border-b border-white/5 pb-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Lyrics practice</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Lyrics practice</p>
+              {languageLabel && (
+                <span className="rounded-full border border-cyan-300/10 bg-cyan-300/[0.04] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-100/75">
+                  {languageLabel}{confidence !== null ? ` · ${confidence}%` : ""}
+                </span>
+              )}
+            </div>
             <h2 className="mt-2 text-xl font-semibold text-white">Follow the vocal timeline</h2>
           </div>
           {hasVocals && hasInstrumental && (
@@ -115,7 +130,7 @@ export default function LyricsPanel({
               </button>
             )}
 
-            <div className="flex items-center rounded-xl border border-white/[0.06] bg-black/10 p-1" role="group" aria-label="Playback speed">
+            <div className="flex max-w-full flex-wrap items-center rounded-xl border border-white/[0.06] bg-black/10 p-1" role="group" aria-label="Playback speed">
               {PLAYBACK_SPEEDS.map((speed) => (
                 <button
                   key={speed}
@@ -148,23 +163,23 @@ export default function LyricsPanel({
         )}
       </div>
 
-      <div className="mt-5 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-violet-500/[0.075] to-cyan-400/[0.035] px-5 py-5 text-center">
+      <div className="mt-5 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-violet-500/[0.075] to-cyan-400/[0.035] px-4 py-4 text-center sm:px-5 sm:py-5">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {activeLine ? `Now · ${formatTime(activeLine.start)}` : hasAudio ? "Ready for playback" : "Transcription"}
         </p>
-        <p className={`mt-2 min-h-12 text-lg font-semibold leading-7 ${activeLine ? "text-white" : "text-slate-500"}`}>
+        <p className={`mt-2 min-h-12 text-base font-semibold leading-7 sm:text-lg ${activeLine ? "text-white" : "text-slate-500"}`}>
           {activeLine?.text || (hasAudio ? "Press play and the current lyric will appear here." : "Lyrics are available below without synchronized audio playback.")}
         </p>
       </div>
 
       {loopRange && (
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-cyan-300/10 bg-cyan-300/[0.035] px-3 py-2 text-xs text-cyan-100/80">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-300/10 bg-cyan-300/[0.035] px-3 py-2 text-xs text-cyan-100/80">
           <span>Looping {formatTime(loopRange.start)} → {formatTime(loopRange.end)}</span>
           <button type="button" onClick={clearLoop} className="font-medium text-cyan-200 hover:text-white">Clear</button>
         </div>
       )}
 
-      <div className="lyrics-scroll mt-4 max-h-[410px] space-y-1 overflow-y-auto pr-1">
+      <div className="lyrics-scroll mt-4 max-h-[350px] space-y-1 overflow-y-auto pr-1 sm:max-h-[430px] xl:max-h-[520px]">
         {lines.length === 0 ? (
           <div className="rounded-xl border border-white/5 bg-black/10 px-4 py-8 text-center text-sm text-slate-500">No lyrics were detected for this track.</div>
         ) : (
@@ -187,7 +202,7 @@ export default function LyricsPanel({
                 } ${hasAudio ? "cursor-pointer" : "cursor-default"}`}
               >
                 <span className={`mt-0.5 w-10 shrink-0 font-mono text-[10px] tabular-nums ${active ? "text-violet-300" : "text-slate-700"}`}>{formatTime(line.start)}</span>
-                <span className="text-sm leading-6">{line.text}</span>
+                <span className="min-w-0 text-sm leading-6">{line.text}</span>
               </button>
             );
           })

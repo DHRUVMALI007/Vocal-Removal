@@ -6,11 +6,13 @@ AI-powered music vocal removal, stem separation, lyrics transcription, and karao
 
 - **Upload** audio (MP3, WAV, FLAC, M4A, OGG, AAC)
 - **AI stem separation** via HTDemucs (vocals, drums, bass, other + instrumental mix)
-- **Lyrics transcription** from isolated vocal stem using faster-whisper
+- **Fast multilingual lyrics transcription** from the isolated vocal stem using faster-whisper
+- **Language hints** for Auto, English, Hindi, and Gujarati (Auto still detects the language)
 - **Synchronized lyrics** with click-to-seek and line highlighting
-- **Stem mixer** — mute, solo, volume per channel
+- **Stem mixer** — mute, solo, volume per channel + Balanced/Karaoke/Vocals presets
 - **Karaoke mode** — instrumental playback with vocals muted
-- **Playback speed** control (0.5x / 0.75x / 1x) via Web Audio API
+- **Playback speed** control (0.5x / 0.75x / 1x / 1.25x) via Web Audio API
+- **Studio transport** — ±10 second controls, mobile bottom transport, keyboard shortcuts, and copyable session links
 - **Loop sections** with an explicit loop mode and start/end lyric selection
 - **Downloads** — individual stems, lyrics (TXT/SRT/LRC), or ZIP
 - **Auto cleanup** of temporary jobs after configurable TTL
@@ -115,7 +117,13 @@ See [`.env.example`](.env.example):
 | `JOB_TTL_HOURS` | `24` | Auto-delete jobs after N hours |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Upload size limit |
 | `DEMUCS_MODEL` | `htdemucs` | Separation model |
-| `WHISPER_MODEL` | `base` | Whisper model size |
+| `DEMUCS_OVERLAP` | `0.15` | Lower overlap for faster chunked separation |
+| `DEMUCS_SHIFTS` | `0` | Disable repeated shift predictions for speed |
+| `WHISPER_MODEL` | `base` | Fast multilingual Whisper model size |
+| `WHISPER_BEAM_SIZE` | `1` | Fast greedy/low-beam decoding |
+| `WHISPER_VAD_MIN_SILENCE_MS` | `500` | Silence threshold used by VAD |
+| `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | `false` | Avoid previous-window prompting for faster, safer lyric decoding |
+| `WHISPER_LANGUAGE` | _(empty)_ | Optional server-wide language override; leave empty for per-job Auto/English/Hindi/Gujarati |
 | `DEVICE` | `auto` | `cuda`, `cpu`, or `auto` |
 | `CORS_ORIGINS` | `http://localhost:3000` | Allowed frontend origins |
 
@@ -125,7 +133,7 @@ See [`.env.example`](.env.example):
 - Use a reverse proxy (nginx/Caddy) for HTTPS and file size limits.
 - Mount persistent volume for `temp/` or replace with S3 + database later.
 - For GPU servers, install CUDA-enabled PyTorch and set `DEVICE=cuda`.
-- Consider larger Whisper models (`small`, `medium`) for better lyrics accuracy.
+- The default `base` model favors response time. Use `small` or `medium` when lyrics accuracy matters more than speed, especially on difficult recordings.
 - Add Redis/Celery for job queue at scale.
 - Auth and persistent storage can plug in without changing the core service interfaces.
 

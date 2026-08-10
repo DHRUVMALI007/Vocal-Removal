@@ -44,11 +44,16 @@ class JobManager:
         self._separator: StemSeparator = DemucsSeparator(
             model_name=self.settings.demucs_model,
             device=self.settings.device,
+            overlap=self.settings.demucs_overlap,
+            shifts=self.settings.demucs_shifts,
         )
         self._transcriber: TranscriptionService = WhisperTranscriptionService(
             model_size=self.settings.whisper_model,
             device=self.settings.effective_whisper_device,
             compute_type=self.settings.whisper_compute_type,
+            beam_size=self.settings.whisper_beam_size,
+            vad_min_silence_ms=self.settings.whisper_vad_min_silence_ms,
+            condition_on_previous_text=self.settings.whisper_condition_on_previous_text,
         )
 
     def job_dir(self, job_id: str) -> Path:
@@ -71,7 +76,9 @@ class JobManager:
         meta.updated_at = self._now()
         path = self.metadata_path(meta.job_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(meta.model_dump_json(indent=2), encoding="utf-8")
+        temp_path = path.with_suffix(".json.tmp")
+        temp_path.write_text(meta.model_dump_json(indent=2), encoding="utf-8")
+        temp_path.replace(path)
 
     def create_job(self, original_filename: str, input_path: Path) -> JobMetadata:
         job_id = str(uuid.uuid4())
@@ -150,10 +157,28 @@ class JobManager:
 
             required_stems = self._required_demucs_stems(meta)
             stems_dir = job_path / "stems"
+            progress_guard = {"value": 0.0}
+
+            def separation_progress(fraction: float) -> None:
+                # Demucs runs in a worker thread. Throttle metadata writes while
+                # still giving the UI useful progress during the longest stage.
+                fraction = max(0.0, min(1.0, fraction))
+                if fraction < 1.0 and fraction - progress_guard["value"] < 0.035:
+                    return
+                progress_guard["value"] = fraction
+                self.update_progress(
+                    job_id,
+                    30.0 + fraction * 30.0,
+                    step=ProcessingStep.SEPARATE,
+                    message=f"Separating the mix · {round(fraction * 100)}%",
+                    status=JobStatus.PROCESSING,
+                )
+
             stem_paths = await self._separator.separate(
                 normalized,
                 stems_dir,
                 required_stems=required_stems,
+                progress_callback=separation_progress,
             )
 
             meta.progress = 60.0
@@ -225,11 +250,20 @@ class JobManager:
             if not vocals_path.exists():
                 raise FileNotFoundError("Vocal stem not found. Run separation first.")
 
-            language = self.settings.whisper_language or None
-            lines = await self._transcriber.transcribe(vocals_path, language=language)
+            configured_language = self.settings.whisper_language.strip() or None
+            requested_language = meta.requested_language
+            language = configured_language or (None if requested_language == "auto" else requested_language)
+            language_label = {"en": "English", "hi": "Hindi", "gu": "Gujarati"}.get(language or "", "Auto detect")
+            meta.message = f"Transcribing vocals · {language_label}"
+            self.save_metadata(meta)
+
+            transcription = await self._transcriber.transcribe(vocals_path, language=language)
+            lines = transcription.lines
+            meta.detected_language = transcription.language
+            meta.language_probability = transcription.language_probability
 
             meta.step = ProcessingStep.LYRICS
-            meta.message = "Preparing lyrics"
+            meta.message = "Preparing synchronized lyrics"
             meta.progress = 90.0
             self.save_metadata(meta)
 
@@ -339,6 +373,9 @@ class JobManager:
             selected = options or SeparationOptions()
             meta.requested_outputs = list(selected.outputs)
             meta.include_lyrics = selected.include_lyrics
+            meta.requested_language = selected.transcription_language
+            meta.detected_language = None
+            meta.language_probability = None
             meta.status = JobStatus.QUEUED
             meta.message = "Queued for processing"
             meta.progress = 0.0

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { JobStatusResponse, ProcessingStep } from "@/lib/types";
 
 interface ProcessingExperienceProps {
@@ -21,7 +22,15 @@ const TIPS = [
   "Lyric loop mode is useful for rehearsing a difficult phrase repeatedly.",
   "You can slow playback to 0.5× or 0.75× from the lyrics practice panel.",
   "Download only the stems you need, or grab the entire session as a ZIP.",
+  "The first song can take longer while AI models load; later sessions reuse the loaded separator.",
+  "Choosing English, Hindi, or Gujarati skips language detection and gives Whisper a stronger hint.",
 ];
+
+function formatElapsed(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+}
 
 function stageState(index: number, progress: number, currentStep?: ProcessingStep | null) {
   const stage = STAGES[index];
@@ -33,7 +42,20 @@ function stageState(index: number, progress: number, currentStep?: ProcessingSte
 
 export default function ProcessingExperience({ status, trackName, onStartOver }: ProcessingExperienceProps) {
   const progress = Math.max(0, Math.min(100, status?.progress ?? 0));
-  const tip = TIPS[Math.floor(progress / 19) % TIPS.length];
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [tipIndex, setTipIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setElapsedSeconds((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setTipIndex((value) => (value + 1) % TIPS.length), 9000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const tip = TIPS[tipIndex];
 
   return (
     <section className="relative min-h-[76vh] overflow-hidden">
@@ -73,13 +95,16 @@ export default function ProcessingExperience({ status, trackName, onStartOver }:
           </div>
 
           <div className="rounded-[2rem] border border-white/[0.08] bg-[#0d111d]/80 p-5 shadow-2xl backdrop-blur sm:p-7">
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Session progress</p>
-                <p className="mt-1 text-2xl font-semibold text-white">{Math.round(progress)}%</p>
+                <div className="mt-1 flex items-baseline gap-3">
+                  <p className="text-2xl font-semibold text-white">{Math.round(progress)}%</p>
+                  <span className="font-mono text-xs tabular-nums text-slate-600">{formatElapsed(elapsedSeconds)} elapsed</span>
+                </div>
               </div>
               <span className="rounded-full border border-cyan-300/[0.15] bg-cyan-300/[0.055] px-3 py-1.5 text-xs font-medium text-cyan-200">
-                Keep this tab open
+                Live progress
               </span>
             </div>
 

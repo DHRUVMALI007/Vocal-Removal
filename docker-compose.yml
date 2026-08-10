@@ -9,7 +9,12 @@ services:
       - TEMP_DIR=/app/temp
       - CORS_ORIGINS=http://localhost:3000
       - DEMUCS_MODEL=htdemucs
+      - DEMUCS_OVERLAP=0.15
+      - DEMUCS_SHIFTS=0
       - WHISPER_MODEL=base
+      - WHISPER_BEAM_SIZE=1
+      - WHISPER_VAD_MIN_SILENCE_MS=500
+      - WHISPER_CONDITION_ON_PREVIOUS_TEXT=false
       - DEVICE=auto
       - JOB_TTL_HOURS=24
       - MAX_UPLOAD_SIZE_MB=100

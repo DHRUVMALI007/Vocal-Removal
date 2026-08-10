@@ -40,15 +40,6 @@ async def create_job(file: UploadFile = File(...)) -> JobCreateResponse:
     if not validate_mime(file.content_type, settings.allowed_ext_set):
         raise HTTPException(status_code=400, detail="Unsupported MIME type")
 
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="File is empty")
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Max size: {settings.max_upload_size_mb} MB",
-        )
-
     safe_name = sanitize_filename(file.filename)
 
     job_id = str(uuid.uuid4())
@@ -56,7 +47,33 @@ async def create_job(file: UploadFile = File(...)) -> JobCreateResponse:
     job_path.mkdir(parents=True, exist_ok=True)
 
     input_path = job_path / f"input{Path(safe_name).suffix.lower()}"
-    input_path.write_bytes(content)
+    total_bytes = 0
+    chunk_size = 1024 * 1024
+
+    try:
+        with input_path.open("wb") as output:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > settings.max_upload_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Max size: {settings.max_upload_size_mb} MB",
+                    )
+                output.write(chunk)
+    except HTTPException:
+        manager.delete_job(job_id)
+        raise
+    except Exception as exc:
+        manager.delete_job(job_id)
+        logger.exception("Upload failed for job %s", job_id)
+        raise HTTPException(status_code=500, detail="Could not save uploaded audio") from exc
+
+    if total_bytes == 0:
+        manager.delete_job(job_id)
+        raise HTTPException(status_code=400, detail="File is empty")
 
     now = datetime.now(timezone.utc).isoformat()
     meta = JobMetadata(
@@ -69,7 +86,7 @@ async def create_job(file: UploadFile = File(...)) -> JobCreateResponse:
     )
     manager.save_metadata(meta)
 
-    logger.info("Uploaded file for job %s: %s (%d bytes)", job_id, safe_name, len(content))
+    logger.info("Uploaded file for job %s: %s (%d bytes)", job_id, safe_name, total_bytes)
     return JobCreateResponse(job_id=job_id, status=JobStatus.CREATED)
 
 
@@ -138,6 +155,9 @@ async def get_results(job_id: str) -> JobResultsResponse:
             "original_filename": meta.original_filename,
             "requested_outputs": meta.requested_outputs,
             "include_lyrics": meta.include_lyrics,
+            "requested_language": meta.requested_language,
+            "detected_language": meta.detected_language,
+            "language_probability": meta.language_probability,
         },
     )
 

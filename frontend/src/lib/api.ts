@@ -22,10 +22,46 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
-export async function createJob(file: File): Promise<{ job_id: string; status: string }> {
+export async function createJob(
+  file: File,
+  onUploadProgress?: (percent: number) => void,
+): Promise<{ job_id: string; status: string }> {
   const form = new FormData();
   form.append("file", file);
-  return request("/api/jobs", { method: "POST", body: form });
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/api/jobs`);
+    xhr.responseType = "json";
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      onUploadProgress?.(Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100))));
+    };
+
+    xhr.onerror = () => reject(new Error("Cannot reach the server. Check that the backend is running and reachable."));
+    xhr.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
+    xhr.onload = () => {
+      const body = xhr.response ?? (() => {
+        try {
+          return JSON.parse(xhr.responseText || "{}");
+        } catch {
+          return {};
+        }
+      })();
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onUploadProgress?.(100);
+        resolve(body);
+        return;
+      }
+
+      const detail = body?.detail;
+      reject(new Error(typeof detail === "string" ? detail : `Upload failed (${xhr.status})`));
+    };
+
+    xhr.send(form);
+  });
 }
 
 export async function startSeparation(jobId: string, options: SeparationOptions): Promise<JobStatusResponse> {
