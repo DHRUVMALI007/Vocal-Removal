@@ -6,15 +6,16 @@ AI-powered music vocal removal, stem separation, lyrics transcription, and karao
 
 - **Upload** audio (MP3, WAV, FLAC, M4A, OGG, AAC)
 - **AI stem separation** via HTDemucs (vocals, drums, bass, other + instrumental mix)
-- **Fast multilingual lyrics transcription** from the isolated vocal stem using faster-whisper
-- **Language hints** for Auto, English, Hindi, and Gujarati (Auto still detects the language)
-- **Synchronized lyrics** with click-to-seek and line highlighting
-- **Stem mixer** — mute, solo, volume per channel + Balanced/Karaoke/Vocals presets
+- **Literal multilingual lyrics transcription** from the isolated vocal stem using faster-whisper (`task=transcribe`, no translation/semantic rewrite)
+- **Language hints** for Auto, English, Hindi, and Gujarati, plus optional Auto→Hindi/Gujarati re-decode when Urdu is detected
+- **Spotify-style synchronized lyrics** with follow mode, large active lyrics, click-to-seek, and original/preferred transcript switching
+- **Desktop DJ stem console** — per-channel mute/cue, gain, stereo pan, 3-band EQ, master fader, and live master meter
+- **Instrument practice targets** — sing, drums, bass, or guitar/keys (`other`) while the remaining band and lyrics stay synchronized
 - **Karaoke mode** — instrumental playback with vocals muted
 - **Playback speed** control (0.5x / 0.75x / 1x / 1.25x) via Web Audio API
 - **Studio transport** — ±10 second controls, mobile bottom transport, keyboard shortcuts, and copyable session links
-- **Loop sections** with an explicit loop mode and start/end lyric selection
-- **Downloads** — individual stems, lyrics (TXT/SRT/LRC), or ZIP
+- **Loop sections** with lyric start/end selection plus instant 4/8/16-second deck loops
+- **Downloads** — individual stems, preferred lyrics, preserved original auto transcript when applicable, or ZIP
 - **Auto cleanup** of temporary jobs after configurable TTL
 - **Music-first responsive UI** with landing, studio, about, processing, and recoverable job routes
 - **Engaging processing experience** with live progress stages, animated visualizer, and practice tips
@@ -24,6 +25,7 @@ AI-powered music vocal removal, stem separation, lyrics transcription, and karao
 - HTDemucs outputs **4 stems**: vocals, drums, bass, other. No dedicated guitar/tabla stems unless you add a specialized model via the `StemSeparator` interface.
 - Separation quality varies by song — not guaranteed 100% accurate.
 - Playback speed uses Web Audio `playbackRate`; pitch can shift at slower speeds because true time-stretch/pitch-preservation is not implemented in this MVP.
+- Whisper is best-effort ASR: literal mode prevents application-side translation/rewriting, but the speech-recognition model can still mishear words.
 
 ## Architecture
 

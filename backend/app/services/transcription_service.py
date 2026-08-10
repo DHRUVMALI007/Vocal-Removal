@@ -91,9 +91,13 @@ class WhisperTranscriptionService(TranscriptionService):
             self.beam_size,
         )
 
-        # The UI needs segment timestamps, not per-word timestamps. Avoiding
-        # word-level alignment saves work while keeping karaoke line timing.
+        # Literal transcription mode: ask Whisper for same-language speech
+        # recognition and keep its segment text directly. There is deliberately
+        # no translation task, LLM cleanup, grammar correction, prompt, or
+        # application hotword list that could rewrite words into something "more sensible".
+        # The UI needs segment timestamps, not expensive per-word alignment.
         kwargs: dict = {
+            "task": "transcribe",
             "beam_size": self.beam_size,
             "best_of": 1,
             "temperature": 0.0,

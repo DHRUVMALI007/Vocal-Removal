@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { OutputStem, SeparationOptions, TranscriptionLanguage } from "@/lib/types";
+import type { OutputStem, SeparationOptions, TranscriptionLanguage, UrduScriptFallback } from "@/lib/types";
 
 interface UploadZoneProps {
   onUpload: (file: File, options: SeparationOptions) => void;
@@ -40,6 +40,7 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
   const [outputs, setOutputs] = useState<OutputStem[]>(DEFAULT_OUTPUTS);
   const [includeLyrics, setIncludeLyrics] = useState(true);
   const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>("auto");
+  const [urduScriptFallback, setUrduScriptFallback] = useState<UrduScriptFallback>("hi");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const validate = useCallback(
@@ -76,13 +77,18 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
     setError(null);
   };
 
-  const applyPreset = (preset: "karaoke" | "instrumental" | "full") => {
+  const applyPreset = (preset: "karaoke" | "instrumental" | "band" | "full") => {
     if (preset === "karaoke") {
       setOutputs(["vocals", "instrumental"]);
       setIncludeLyrics(true);
     } else if (preset === "instrumental") {
       setOutputs(["instrumental"]);
       setIncludeLyrics(false);
+    } else if (preset === "band") {
+      // Keep the four true Demucs sources so Studio can remove one instrument
+      // at a time without doubling a rendered instrumental track.
+      setOutputs(["vocals", "drums", "bass", "other"]);
+      setIncludeLyrics(true);
     } else {
       setOutputs(OUTPUTS.map((item) => item.name));
       setIncludeLyrics(true);
@@ -105,6 +111,8 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
       outputs,
       include_lyrics: includeLyrics,
       transcription_language: includeLyrics ? transcriptionLanguage : "auto",
+      urdu_script_fallback:
+        includeLyrics && transcriptionLanguage === "auto" ? urduScriptFallback : "none",
     });
   };
 
@@ -127,6 +135,7 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
         <div className="mt-5 flex flex-wrap gap-2">
           <button type="button" disabled={disabled} onClick={() => applyPreset("karaoke")} className="preset-chip">Karaoke setup</button>
           <button type="button" disabled={disabled} onClick={() => applyPreset("instrumental")} className="preset-chip">Instrumental only</button>
+          <button type="button" disabled={disabled} onClick={() => applyPreset("band")} className="preset-chip">Band practice</button>
           <button type="button" disabled={disabled} onClick={() => applyPreset("full")} className="preset-chip">Full stem pack</button>
         </div>
 
@@ -220,7 +229,10 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
                   key={language.code}
                   type="button"
                   disabled={disabled || !includeLyrics}
-                  onClick={() => setTranscriptionLanguage(language.code)}
+                  onClick={() => {
+                    setTranscriptionLanguage(language.code);
+                    if (language.code !== "auto") setUrduScriptFallback("none");
+                  }}
                   className={`min-w-0 rounded-xl border px-3 py-3 text-left transition ${
                     active
                       ? "border-violet-400/25 bg-violet-500/[0.09] text-white"
@@ -234,10 +246,43 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
               );
             })}
           </div>
+
+          {includeLyrics && transcriptionLanguage === "auto" && (
+            <div className="mt-4 rounded-xl border border-amber-300/10 bg-amber-300/[0.025] p-3 sm:p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-2xl">
+                  <p className="text-xs font-semibold text-amber-100">If Auto detects Urdu script</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    Keep the raw transcript, or re-decode the same vocals with a Hindi/Gujarati language token. This is not translation or sentence rewriting.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.06] bg-black/10 p-1 text-[11px]">
+                  {[
+                    ["none", "Keep Urdu"],
+                    ["hi", "Hindi script"],
+                    ["gu", "Gujarati"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setUrduScriptFallback(value as UrduScriptFallback)}
+                      className={`rounded-lg px-2.5 py-2 font-medium transition ${
+                        urduScriptFallback === value
+                          ? "bg-amber-300/10 text-amber-100"
+                          : "text-slate-600 hover:text-slate-300"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="mt-5 text-xs leading-5 text-slate-600">
-          HTDemucs calculates its four core sources together. Some temporary internal stems may be created to build an instrumental or lyrics, then removed when they were not selected.
+          Band practice keeps the real vocals/drums/bass/other stems available so Studio can remove one part while lyrics continue to follow playback. HTDemucs calculates its four core sources together. Some temporary internal stems may be created to build an instrumental or lyrics, then removed when they were not selected.
         </p>
       </section>
 

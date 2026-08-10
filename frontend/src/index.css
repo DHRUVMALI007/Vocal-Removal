@@ -437,3 +437,73 @@ input:focus-visible,
     background-size: 34px 34px;
   }
 }
+
+/* Wide desktop DJ workspace */
+.dj-console,
+.dj-transport,
+.spotify-lyrics-panel {
+  position: relative;
+  isolation: isolate;
+}
+
+.dj-console::before,
+.dj-transport::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 88%);
+}
+
+.dj-console::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), inset 0 -30px 80px rgba(0, 0, 0, 0.16);
+}
+
+.spotify-lyrics-panel {
+  background:
+    radial-gradient(circle at 80% 0%, rgba(34, 211, 238, 0.055), transparent 18rem),
+    radial-gradient(circle at 0% 30%, rgba(124, 92, 255, 0.06), transparent 20rem),
+    #0a0f18;
+}
+
+.spotify-lyrics-scroll {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+.dj-volume-fader {
+  height: 8px;
+}
+
+@media (min-width: 1280px) {
+  .dj-console {
+    min-height: 620px;
+  }
+
+  .spotify-lyrics-panel {
+    max-height: calc(100vh - 7.5rem);
+  }
+}
+
+@media (min-width: 1536px) {
+  .transport-secondary {
+    width: 48px;
+    height: 48px;
+  }
+
+  .dj-console {
+    min-height: 650px;
+  }
+}

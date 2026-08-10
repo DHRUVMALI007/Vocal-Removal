@@ -156,8 +156,11 @@ async def get_results(job_id: str) -> JobResultsResponse:
             "requested_outputs": meta.requested_outputs,
             "include_lyrics": meta.include_lyrics,
             "requested_language": meta.requested_language,
+            "urdu_script_fallback": meta.urdu_script_fallback,
             "detected_language": meta.detected_language,
             "language_probability": meta.language_probability,
+            "transcript_language_used": meta.transcript_language_used,
+            "literal_transcription": True,
         },
     )
 

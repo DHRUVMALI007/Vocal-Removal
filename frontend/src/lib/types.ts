@@ -4,11 +4,14 @@ export type ProcessingStep = "upload" | "normalize" | "separate" | "instrumental
 
 export type OutputStem = "vocals" | "drums" | "bass" | "other" | "instrumental";
 export type TranscriptionLanguage = "auto" | "en" | "hi" | "gu";
+export type UrduScriptFallback = "none" | "hi" | "gu";
+export type PracticeTarget = "mix" | "vocals" | "drums" | "bass" | "other";
 
 export interface SeparationOptions {
   outputs: OutputStem[];
   include_lyrics: boolean;
   transcription_language: TranscriptionLanguage;
+  urdu_script_fallback: UrduScriptFallback;
 }
 
 export interface StemInfo {
@@ -26,9 +29,13 @@ export interface LyricLine {
 
 export interface LyricsData {
   lines: LyricLine[];
+  original_lines: LyricLine[];
   txt_file: string | null;
   srt_file: string | null;
   lrc_file: string | null;
+  original_txt_file: string | null;
+  original_srt_file: string | null;
+  original_lrc_file: string | null;
 }
 
 export interface JobStatusResponse {
@@ -56,6 +63,10 @@ export interface StemChannelState {
   muted: boolean;
   solo: boolean;
   volume: number;
+  pan: number;
+  eqLow: number;
+  eqMid: number;
+  eqHigh: number;
   url: string;
 }
 

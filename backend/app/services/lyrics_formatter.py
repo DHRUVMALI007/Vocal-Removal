@@ -39,17 +39,18 @@ def write_lyrics_lrc(lines: list[LyricLine], path: Path) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def export_lyrics(lines: list[LyricLine], job_dir: Path) -> dict[str, str]:
-    txt_path = job_dir / "lyrics.txt"
-    srt_path = job_dir / "lyrics.srt"
-    lrc_path = job_dir / "lyrics.lrc"
+def export_lyrics(lines: list[LyricLine], job_dir: Path, basename: str = "lyrics") -> dict[str, str]:
+    """Write literal ASR lines without translation, rewriting, or normalization."""
+    txt_path = job_dir / f"{basename}.txt"
+    srt_path = job_dir / f"{basename}.srt"
+    lrc_path = job_dir / f"{basename}.lrc"
 
     write_lyrics_txt(lines, txt_path)
     write_lyrics_srt(lines, srt_path)
     write_lyrics_lrc(lines, lrc_path)
 
     return {
-        "txt_file": "lyrics.txt",
-        "srt_file": "lyrics.srt",
-        "lrc_file": "lyrics.lrc",
+        "txt_file": txt_path.name,
+        "srt_file": srt_path.name,
+        "lrc_file": lrc_path.name,
     }

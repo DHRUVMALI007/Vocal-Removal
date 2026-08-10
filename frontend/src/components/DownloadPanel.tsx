@@ -26,9 +26,12 @@ function DownloadIcon() {
 
 export default function DownloadPanel({ jobId, results }: DownloadPanelProps) {
   const lyricItems = [
-    results.download_urls.lyrics_txt ? { key: "lyrics_txt", label: "Lyrics TXT", filename: "lyrics.txt", detail: "Plain text" } : null,
-    results.download_urls.lyrics_srt ? { key: "lyrics_srt", label: "Lyrics SRT", filename: "lyrics.srt", detail: "Subtitle timing" } : null,
-    results.download_urls.lyrics_lrc ? { key: "lyrics_lrc", label: "Lyrics LRC", filename: "lyrics.lrc", detail: "Synced lyric format" } : null,
+    results.download_urls.lyrics_txt ? { key: "lyrics_txt", label: "Lyrics TXT", filename: "lyrics.txt", detail: "Preferred literal transcript" } : null,
+    results.download_urls.lyrics_srt ? { key: "lyrics_srt", label: "Lyrics SRT", filename: "lyrics.srt", detail: "Preferred synced timing" } : null,
+    results.download_urls.lyrics_lrc ? { key: "lyrics_lrc", label: "Lyrics LRC", filename: "lyrics.lrc", detail: "Preferred lyric format" } : null,
+    results.download_urls.lyrics_original_txt ? { key: "lyrics_original_txt", label: "Original TXT", filename: "lyrics_original.txt", detail: "Raw auto-detected transcript" } : null,
+    results.download_urls.lyrics_original_srt ? { key: "lyrics_original_srt", label: "Original SRT", filename: "lyrics_original.srt", detail: "Raw auto-detected timing" } : null,
+    results.download_urls.lyrics_original_lrc ? { key: "lyrics_original_lrc", label: "Original LRC", filename: "lyrics_original.lrc", detail: "Raw auto-detected lyrics" } : null,
   ].filter(Boolean) as Array<{ key: string; label: string; filename: string; detail: string }>;
 
   return (

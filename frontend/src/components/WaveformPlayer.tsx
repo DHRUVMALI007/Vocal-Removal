@@ -46,7 +46,7 @@ export default function WaveformPlayer({
       barWidth: 2,
       barGap: 2,
       barRadius: 2,
-      height: 88,
+      height: 116,
       normalize: true,
       interact: true,
     });
@@ -71,11 +71,11 @@ export default function WaveformPlayer({
   }, [currentTime, duration, ready]);
 
   return (
-    <section className="rounded-[2rem] border border-white/[0.08] bg-[#0d111d]/[0.85] p-4 shadow-xl sm:p-5">
+    <section className="rounded-2xl border border-white/[0.09] bg-[#090d16]/95 p-3 shadow-2xl sm:rounded-[2rem] sm:p-5 xl:p-6">
       <div className="mb-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${isPlaying ? "animate-pulse bg-emerald-300" : "bg-slate-600"}`} />
-          <span className="text-xs font-medium text-slate-400">{isPlaying ? "Live playback" : "Session timeline"}</span>
+          <span className="text-xs font-medium text-slate-400">{isPlaying ? "Deck waveform · live" : "Deck waveform"}</span>
         </div>
         <div className="font-mono text-xs tabular-nums text-slate-500">{formatTime(currentTime)} / {formatTime(duration)}</div>
       </div>
@@ -89,7 +89,7 @@ export default function WaveformPlayer({
             </div>
           </div>
         )}
-        <div ref={containerRef} id="waveform" className="min-h-[88px] w-full" />
+        <div ref={containerRef} id="waveform" className="min-h-[116px] w-full" />
       </div>
 
       {error && <p className="mt-3 text-xs text-red-300">{error}</p>}

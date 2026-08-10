@@ -406,7 +406,7 @@ function StudioPage({ routeJobId, navigate }: { routeJobId?: string; navigate: (
 
   if (phase === "workspace" && routeJobId) {
     return (
-      <section className="mx-auto max-w-7xl px-3 py-5 pb-24 sm:px-6 sm:py-8 sm:pb-10 lg:px-8 lg:py-10">
+      <section className="mx-auto w-full max-w-[1680px] px-3 py-5 pb-24 sm:px-5 sm:py-8 sm:pb-10 lg:px-6 xl:px-8 xl:py-9">
         <Workspace jobId={routeJobId} onNewSong={startOver} />
       </section>
     );

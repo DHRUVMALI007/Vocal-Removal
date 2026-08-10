@@ -240,7 +240,7 @@ class JobManager:
 
         try:
             meta.step = ProcessingStep.TRANSCRIBE
-            meta.message = "Transcribing vocals"
+            meta.message = "Transcribing vocals literally"
             meta.progress = max(meta.progress, 80.0)
             meta.transcription_model = self.settings.whisper_model
             self.save_metadata(meta)
@@ -254,25 +254,79 @@ class JobManager:
             requested_language = meta.requested_language
             language = configured_language or (None if requested_language == "auto" else requested_language)
             language_label = {"en": "English", "hi": "Hindi", "gu": "Gujarati"}.get(language or "", "Auto detect")
-            meta.message = f"Transcribing vocals · {language_label}"
+            meta.message = f"Literal transcription · {language_label}"
             self.save_metadata(meta)
 
+            # First pass is always the literal ASR result. Whisper is explicitly
+            # called with task=transcribe, so no translation/grammar cleanup is
+            # performed by this application.
             transcription = await self._transcriber.transcribe(vocals_path, language=language)
-            lines = transcription.lines
+            display_transcription = transcription
+            original_lines = []
+            original_files: dict[str, str] = {}
+
             meta.detected_language = transcription.language
             meta.language_probability = transcription.language_probability
+            meta.transcript_language_used = language or transcription.language
+
+            # Hindi and Urdu speech can be ambiguous to automatic language
+            # detection. If Auto specifically comes back as Urdu and the user
+            # asked for an Indic script fallback, keep the raw auto transcript
+            # and re-decode the SAME audio with the requested language token.
+            # This is speech recognition again, not translation or paraphrasing.
+            fallback = meta.urdu_script_fallback
+            should_redecode = (
+                language is None
+                and transcription.language == "ur"
+                and fallback in {"hi", "gu"}
+            )
+            if should_redecode:
+                fallback_label = "Hindi / Devanagari" if fallback == "hi" else "Gujarati"
+                meta.message = f"Urdu detected · re-decoding as {fallback_label}"
+                meta.progress = max(meta.progress, 86.0)
+                self.save_metadata(meta)
+                try:
+                    fallback_transcription = await self._transcriber.transcribe(
+                        vocals_path,
+                        language=fallback,
+                    )
+                    if fallback_transcription.lines:
+                        original_lines = transcription.lines
+                        display_transcription = fallback_transcription
+                        meta.transcript_language_used = fallback
+                    else:
+                        logger.warning(
+                            "Preferred-script re-decode returned no lines for job %s; keeping original transcript",
+                            job_id,
+                        )
+                except Exception:
+                    # Script preference is optional. Never throw away a valid raw
+                    # transcript because a second preference decode failed.
+                    logger.exception(
+                        "Preferred-script re-decode failed for job %s; keeping original transcript",
+                        job_id,
+                    )
+
+            lines = display_transcription.lines
 
             meta.step = ProcessingStep.LYRICS
-            meta.message = "Preparing synchronized lyrics"
-            meta.progress = 90.0
+            meta.message = "Preparing synchronized literal lyrics"
+            meta.progress = 92.0
             self.save_metadata(meta)
 
             files = export_lyrics(lines, job_path) if lines else {}
+            if original_lines:
+                original_files = export_lyrics(original_lines, job_path, basename="lyrics_original")
+
             meta.lyrics = LyricsData(
                 lines=lines,
+                original_lines=original_lines,
                 txt_file=files.get("txt_file"),
                 srt_file=files.get("srt_file"),
                 lrc_file=files.get("lrc_file"),
+                original_txt_file=original_files.get("txt_file"),
+                original_srt_file=original_files.get("srt_file"),
+                original_lrc_file=original_files.get("lrc_file"),
             )
             meta.step = ProcessingStep.FINALIZE
             meta.message = "Finalizing"
@@ -374,8 +428,10 @@ class JobManager:
             meta.requested_outputs = list(selected.outputs)
             meta.include_lyrics = selected.include_lyrics
             meta.requested_language = selected.transcription_language
+            meta.urdu_script_fallback = selected.urdu_script_fallback
             meta.detected_language = None
             meta.language_probability = None
+            meta.transcript_language_used = None
             meta.status = JobStatus.QUEUED
             meta.message = "Queued for processing"
             meta.progress = 0.0
@@ -407,6 +463,12 @@ class JobManager:
                 urls["lyrics_srt"] = f"/api/jobs/{job_id}/download/{meta.lyrics.srt_file}"
             if meta.lyrics.lrc_file:
                 urls["lyrics_lrc"] = f"/api/jobs/{job_id}/download/{meta.lyrics.lrc_file}"
+            if meta.lyrics.original_txt_file:
+                urls["lyrics_original_txt"] = f"/api/jobs/{job_id}/download/{meta.lyrics.original_txt_file}"
+            if meta.lyrics.original_srt_file:
+                urls["lyrics_original_srt"] = f"/api/jobs/{job_id}/download/{meta.lyrics.original_srt_file}"
+            if meta.lyrics.original_lrc_file:
+                urls["lyrics_original_lrc"] = f"/api/jobs/{job_id}/download/{meta.lyrics.original_lrc_file}"
         urls["all_zip"] = f"/api/jobs/{job_id}/download/all.zip"
         return urls
 
@@ -422,7 +484,14 @@ class JobManager:
     def _allowed_result_filenames(self, meta: JobMetadata) -> set[str]:
         allowed = {stem.filename for stem in meta.stems}
         if meta.lyrics:
-            for filename in (meta.lyrics.txt_file, meta.lyrics.srt_file, meta.lyrics.lrc_file):
+            for filename in (
+                meta.lyrics.txt_file,
+                meta.lyrics.srt_file,
+                meta.lyrics.lrc_file,
+                meta.lyrics.original_txt_file,
+                meta.lyrics.original_srt_file,
+                meta.lyrics.original_lrc_file,
+            ):
                 if filename:
                     allowed.add(filename)
         return allowed
@@ -440,7 +509,14 @@ class JobManager:
                 if p:
                     files.append(p)
             if meta.lyrics:
-                for lf in [meta.lyrics.txt_file, meta.lyrics.srt_file, meta.lyrics.lrc_file]:
+                for lf in [
+                    meta.lyrics.txt_file,
+                    meta.lyrics.srt_file,
+                    meta.lyrics.lrc_file,
+                    meta.lyrics.original_txt_file,
+                    meta.lyrics.original_srt_file,
+                    meta.lyrics.original_lrc_file,
+                ]:
                     if lf and (job_path / lf).exists():
                         files.append(job_path / lf)
             zip_path = job_path / "all.zip"
