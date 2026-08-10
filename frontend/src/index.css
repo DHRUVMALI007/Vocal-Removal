@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-surface text-gray-100 antialiased min-h-screen;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-surface-border bg-surface-card p-4 shadow-lg;
+  }
+  .btn-primary {
+    @apply rounded-lg bg-gradient-to-r from-accent to-accent-dark px-5 py-2.5 font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent/50;
+  }
+  .btn-secondary {
+    @apply rounded-lg border border-surface-border bg-surface-elevated px-3 py-2 text-sm transition hover:border-accent/50 focus:outline-none focus:ring-2 focus:ring-accent/30;
+  }
+  .slider-track {
+    @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-surface-border;
+  }
+  .slider-track::-webkit-slider-thumb {
+    @apply h-3.5 w-3.5 cursor-pointer appearance-none rounded-full bg-accent;
+  }
+}
