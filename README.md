@@ -11,15 +11,17 @@ AI-powered music vocal removal, stem separation, lyrics transcription, and karao
 - **Stem mixer** — mute, solo, volume per channel
 - **Karaoke mode** — instrumental playback with vocals muted
 - **Playback speed** control (0.5x / 0.75x / 1x) via Web Audio API
-- **Loop sections** by clicking two lyric lines
+- **Loop sections** with an explicit loop mode and start/end lyric selection
 - **Downloads** — individual stems, lyrics (TXT/SRT/LRC), or ZIP
 - **Auto cleanup** of temporary jobs after configurable TTL
+- **Music-first responsive UI** with landing, studio, about, processing, and recoverable job routes
+- **Engaging processing experience** with live progress stages, animated visualizer, and practice tips
 
 ### Limitations (by design)
 
 - HTDemucs outputs **4 stems**: vocals, drums, bass, other. No dedicated guitar/tabla stems unless you add a specialized model via the `StemSeparator` interface.
 - Separation quality varies by song — not guaranteed 100% accurate.
-- Pitch-preserving speed change is browser-side (Web Audio `playbackRate`); extreme speeds may affect quality.
+- Playback speed uses Web Audio `playbackRate`; pitch can shift at slower speeds because true time-stretch/pitch-preservation is not implemented in this MVP.
 
 ## Architecture
 
@@ -69,6 +71,17 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Frontend routes
+
+| Route | Purpose |
+|------|---------|
+| `/` | Music-focused landing page and feature overview |
+| `/studio` | Choose outputs and upload a new track |
+| `/studio/{job_id}` | Recoverable processing/results workspace for a temporary job |
+| `/about` | Model scope, limitations, and temporary-file behavior |
+
+The production nginx config includes SPA fallback, so direct refreshes on `/studio/{job_id}` and `/about` resolve correctly.
 
 ## Docker
 

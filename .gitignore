@@ -49,3 +49,7 @@ models/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Frontend tooling cache
+frontend/.vite/
+*.tsbuildinfo

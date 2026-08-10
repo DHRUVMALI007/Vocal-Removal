@@ -3,18 +3,23 @@ import type { JobResultsResponse, JobStatusResponse, SeparationOptions } from ".
 export const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  let res: Response;
+  let response: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, options);
-  } catch {
-    throw new Error("Cannot reach server. Is the backend running?");
+    response = await fetch(`${API_URL}${path}`, options);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Cannot reach the server. Check that the backend is running and reachable.");
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
     const detail = body.detail;
-    throw new Error(typeof detail === "string" ? detail : `Request failed (${res.status})`);
+    if (response.status === 404) {
+      throw new Error(typeof detail === "string" ? detail : "This temporary studio session is no longer available.");
+    }
+    throw new Error(typeof detail === "string" ? detail : `Request failed (${response.status})`);
   }
-  return res.json();
+  return response.json();
 }
 
 export async function createJob(file: File): Promise<{ job_id: string; status: string }> {
@@ -23,10 +28,7 @@ export async function createJob(file: File): Promise<{ job_id: string; status: s
   return request("/api/jobs", { method: "POST", body: form });
 }
 
-export async function startSeparation(
-  jobId: string,
-  options: SeparationOptions,
-): Promise<JobStatusResponse> {
+export async function startSeparation(jobId: string, options: SeparationOptions): Promise<JobStatusResponse> {
   return request(`/api/jobs/${jobId}/separate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -34,8 +36,8 @@ export async function startSeparation(
   });
 }
 
-export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
-  return request(`/api/jobs/${jobId}/status`);
+export async function getJobStatus(jobId: string, signal?: AbortSignal): Promise<JobStatusResponse> {
+  return request(`/api/jobs/${jobId}/status`, { signal });
 }
 
 export async function getJobResults(jobId: string): Promise<JobResultsResponse> {
@@ -43,7 +45,7 @@ export async function getJobResults(jobId: string): Promise<JobResultsResponse> 
 }
 
 export function getDownloadUrl(jobId: string, filename: string): string {
-  return `${API_URL}/api/jobs/${jobId}/download/${filename}`;
+  return `${API_URL}/api/jobs/${jobId}/download/${encodeURIComponent(filename)}`;
 }
 
 export function getStemAudioUrl(jobId: string, filename: string): string {
@@ -59,18 +61,28 @@ export async function pollUntilComplete(
   onProgress?: (status: JobStatusResponse) => void,
   intervalMs = 2000,
   timeoutMs = 10 * 60 * 1000,
+  signal?: AbortSignal,
 ): Promise<JobStatusResponse> {
   const startedAt = Date.now();
 
   while (true) {
-    const status = await getJobStatus(jobId);
+    if (signal?.aborted) throw new DOMException("Polling aborted", "AbortError");
+    const status = await getJobStatus(jobId, signal);
     onProgress?.(status);
-    if (status.status === "completed" || status.status === "failed") {
-      return status;
-    }
+    if (status.status === "completed" || status.status === "failed") return status;
     if (Date.now() - startedAt >= timeoutMs) {
-      throw new Error("Processing timed out. Check the backend logs and try again.");
+      throw new Error("Processing timed out. Check the backend logs and try the track again.");
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Polling aborted", "AbortError"));
+      };
+      const timer = window.setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, intervalMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
   }
 }

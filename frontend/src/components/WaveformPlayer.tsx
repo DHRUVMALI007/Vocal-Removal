@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 
 interface WaveformPlayerProps {
@@ -10,6 +10,13 @@ interface WaveformPlayerProps {
   isPlaying: boolean;
   onSeek: (time: number) => void;
   loopRange?: { start: number; end: number } | null;
+}
+
+function formatTime(time: number) {
+  if (!Number.isFinite(time) || time < 0) return "0:00";
+  const minutes = Math.floor(time / 60);
+  const seconds = Math.floor(time % 60);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 export default function WaveformPlayer({
@@ -22,58 +29,76 @@ export default function WaveformPlayer({
 }: WaveformPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
+    setReady(false);
+    setError(null);
 
-    const ws = WaveSurfer.create({
+    const waveSurfer = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: "#3b3b55",
-      progressColor: "#8b5cf6",
-      cursorColor: "#a78bfa",
+      waveColor: "#323950",
+      progressColor: "#8b7cff",
+      cursorColor: "#86e5ff",
+      cursorWidth: 2,
       barWidth: 2,
-      barGap: 1,
+      barGap: 2,
       barRadius: 2,
-      height: 80,
+      height: 88,
       normalize: true,
       interact: true,
     });
 
-    ws.load(url);
-    ws.on("click", () => onSeek(ws.getCurrentTime()));
-    wsRef.current = ws;
+    waveSurfer.load(url);
+    waveSurfer.on("ready", () => setReady(true));
+    waveSurfer.on("error", () => setError("The waveform preview could not be loaded."));
+    waveSurfer.on("click", () => onSeek(waveSurfer.getCurrentTime()));
+    wsRef.current = waveSurfer;
 
     return () => {
-      ws.destroy();
+      waveSurfer.destroy();
       wsRef.current = null;
     };
-  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [url]); // onSeek intentionally excluded: the mixer seek callback is stable.
 
   useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws || duration <= 0) return;
-    ws.seekTo(currentTime / duration);
-  }, [currentTime, duration]);
-
-  const formatTime = (t: number) => {
-    const m = Math.floor(t / 60);
-    const s = Math.floor(t % 60);
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
+    const waveSurfer = wsRef.current;
+    if (!waveSurfer || !ready || duration <= 0) return;
+    const ratio = Math.max(0, Math.min(1, currentTime / duration));
+    waveSurfer.seekTo(ratio);
+  }, [currentTime, duration, ready]);
 
   return (
-    <div className="card">
-      <div className="mb-2 flex items-center justify-between text-xs text-gray-400">
-        <span>{formatTime(currentTime)}</span>
-        <span className={isPlaying ? "text-accent-light" : ""}>{isPlaying ? "Playing" : "Paused"}</span>
-        <span>{formatTime(duration)}</span>
+    <section className="rounded-[2rem] border border-white/[0.08] bg-[#0d111d]/[0.85] p-4 shadow-xl sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${isPlaying ? "animate-pulse bg-emerald-300" : "bg-slate-600"}`} />
+          <span className="text-xs font-medium text-slate-400">{isPlaying ? "Live playback" : "Session timeline"}</span>
+        </div>
+        <div className="font-mono text-xs tabular-nums text-slate-500">{formatTime(currentTime)} / {formatTime(duration)}</div>
       </div>
-      <div ref={containerRef} id="waveform" className="w-full" />
+
+      <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-black/[0.15] px-2 py-3">
+        {!ready && !error && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090c14]/80 backdrop-blur-sm">
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+              Drawing waveform…
+            </div>
+          </div>
+        )}
+        <div ref={containerRef} id="waveform" className="min-h-[88px] w-full" />
+      </div>
+
+      {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
       {loopRange && (
-        <p className="mt-2 text-xs text-accent-light">
-          Loop: {formatTime(loopRange.start)} – {formatTime(loopRange.end)}
-        </p>
+        <div className="mt-3 flex items-center gap-2 text-xs text-cyan-200/80">
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3" /></svg>
+          Loop {formatTime(loopRange.start)} – {formatTime(loopRange.end)}
+        </div>
       )}
-    </div>
+    </section>
   );
 }

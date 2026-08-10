@@ -16,171 +16,218 @@ export function useStemMixer({ channels, playbackRate = 1 }: UseStemMixerOptions
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
   const playingRef = useRef(false);
+  const rateRef = useRef(playbackRate);
+  const channelsRef = useRef(channels);
+  const animRef = useRef<number>(0);
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const animRef = useRef<number>(0);
-  const channelsRef = useRef(channels);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   channelsRef.current = channels;
-  const channelUrlKey = channels.map((ch) => `${ch.name}:${ch.url}`).join("|");
+  const channelUrlKey = channels.map((channel) => `${channel.name}:${channel.url}`).join("|");
 
   const getCtx = useCallback(() => {
-    if (!ctxRef.current) {
+    if (!ctxRef.current || ctxRef.current.state === "closed") {
       ctxRef.current = new AudioContext();
     }
     return ctxRef.current;
   }, []);
 
-  const loadBuffers = useCallback(async () => {
-    const ctx = getCtx();
-    let maxDuration = 0;
-    for (const ch of channelsRef.current) {
-      if (!ch.url) continue;
-      try {
-        const res = await fetch(ch.url);
-        const arr = await res.arrayBuffer();
-        const buf = await ctx.decodeAudioData(arr);
-        buffersRef.current.set(ch.name, buf);
-        maxDuration = Math.max(maxDuration, buf.duration);
-      } catch {
-        /* skip unavailable stems */
-      }
-    }
-    setDuration(maxDuration);
-    setLoaded(true);
-  }, [channelUrlKey, getCtx]);
-
-  useEffect(() => {
-    buffersRef.current.clear();
-    setLoaded(false);
-    loadBuffers();
-  }, [loadBuffers]);
+  const getEffectiveGain = useCallback((channel: StemChannelState, allChannels: StemChannelState[]) => {
+    const anySolo = allChannels.some((item) => item.solo);
+    if (anySolo && !channel.solo) return 0;
+    if (channel.muted) return 0;
+    return channel.volume;
+  }, []);
 
   const stopSources = useCallback(() => {
-    sourcesRef.current.forEach((src) => {
+    sourcesRef.current.forEach((source) => {
       try {
-        src.stop();
+        source.stop();
       } catch {
-        /* already stopped */
+        // The source may already have ended.
       }
     });
     sourcesRef.current.clear();
+    gainsRef.current.clear();
   }, []);
 
-  const getEffectiveGain = useCallback(
-    (ch: StemChannelState, allChannels: StemChannelState[]) => {
-      const anySolo = allChannels.some((c) => c.solo);
-      if (anySolo && !ch.solo) return 0;
-      if (ch.muted) return 0;
-      return ch.volume;
+  const loadBuffers = useCallback(async () => {
+    const context = getCtx();
+    let maxDuration = 0;
+    let loadedCount = 0;
+    buffersRef.current.clear();
+    setLoaded(false);
+    setLoadError(null);
+
+    for (const channel of channelsRef.current) {
+      if (!channel.url) continue;
+      try {
+        const response = await fetch(channel.url);
+        if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = await context.decodeAudioData(arrayBuffer);
+        buffersRef.current.set(channel.name, buffer);
+        maxDuration = Math.max(maxDuration, buffer.duration);
+        loadedCount += 1;
+      } catch {
+        // Keep loading other stems if one output is unavailable.
+      }
+    }
+
+    setDuration(maxDuration);
+    setLoaded(loadedCount > 0);
+    if (loadedCount === 0 && channelsRef.current.length > 0) {
+      setLoadError("Audio stems could not be loaded. Check that the backend files are still available.");
+    }
+  }, [channelUrlKey, getCtx]);
+
+  useEffect(() => {
+    void loadBuffers();
+  }, [loadBuffers]);
+
+  const startSources = useCallback(
+    (fromTime: number) => {
+      const context = getCtx();
+      stopSources();
+      if (context.state === "suspended") void context.resume();
+
+      const activeChannels = channelsRef.current;
+      activeChannels.forEach((channel) => {
+        const buffer = buffersRef.current.get(channel.name);
+        if (!buffer || buffer.duration <= 0) return;
+
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = rateRef.current;
+
+        const gainNode = context.createGain();
+        gainNode.gain.value = getEffectiveGain(channel, activeChannels);
+        source.connect(gainNode);
+        gainNode.connect(context.destination);
+
+        // Keep every stem running, even when muted. This allows mute/solo changes
+        // to become audible immediately without restarting playback.
+        const safeOffset = Math.max(0, Math.min(fromTime, Math.max(0, buffer.duration - 0.001)));
+        source.start(0, safeOffset);
+        sourcesRef.current.set(channel.name, source);
+        gainsRef.current.set(channel.name, gainNode);
+      });
+
+      startTimeRef.current = context.currentTime;
+      offsetRef.current = fromTime;
+      playingRef.current = sourcesRef.current.size > 0;
+      setIsPlaying(playingRef.current);
     },
-    [],
+    [getCtx, getEffectiveGain, stopSources],
   );
 
   const play = useCallback(
     (fromTime?: number) => {
-      const ctx = getCtx();
-      stopSources();
-      if (fromTime !== undefined) offsetRef.current = fromTime;
-
-      const chs = channelsRef.current;
-      const anySolo = chs.some((c) => c.solo);
-
-      chs.forEach((ch) => {
-        const buf = buffersRef.current.get(ch.name);
-        if (!buf) return;
-        const gain = getEffectiveGain(ch, chs);
-        if (gain <= 0) return;
-
-        const source = ctx.createBufferSource();
-        source.buffer = buf;
-        source.playbackRate.value = playbackRate;
-
-        const gainNode = ctx.createGain();
-        gainNode.gain.value = gain;
-        source.connect(gainNode);
-        gainNode.connect(ctx.destination);
-
-        source.start(0, offsetRef.current);
-        sourcesRef.current.set(ch.name, source);
-        gainsRef.current.set(ch.name, gainNode);
-      });
-
-      startTimeRef.current = ctx.currentTime;
-      playingRef.current = true;
-      setIsPlaying(true);
+      if (!loaded) return;
+      const nextOffset = fromTime ?? offsetRef.current;
+      startSources(Math.max(0, Math.min(nextOffset, duration || nextOffset)));
     },
-    [getCtx, stopSources, getEffectiveGain, playbackRate],
+    [duration, loaded, startSources],
   );
 
   const pause = useCallback(() => {
-    const ctx = ctxRef.current;
-    if (!ctx || !playingRef.current) return;
-    offsetRef.current += (ctx.currentTime - startTimeRef.current) * playbackRate;
+    const context = ctxRef.current;
+    if (!context || !playingRef.current) return;
+    const elapsed = (context.currentTime - startTimeRef.current) * rateRef.current;
+    offsetRef.current = Math.min(offsetRef.current + elapsed, duration);
     stopSources();
     playingRef.current = false;
     setIsPlaying(false);
     setCurrentTime(offsetRef.current);
-  }, [stopSources, playbackRate]);
+  }, [duration, stopSources]);
 
   const seek = useCallback(
     (time: number) => {
-      offsetRef.current = Math.max(0, Math.min(time, duration));
-      if (playingRef.current) {
-        play(offsetRef.current);
-      } else {
-        setCurrentTime(offsetRef.current);
-      }
+      const nextTime = Math.max(0, Math.min(time, duration));
+      offsetRef.current = nextTime;
+      setCurrentTime(nextTime);
+      if (playingRef.current) startSources(nextTime);
     },
-    [duration, play],
+    [duration, startSources],
   );
 
-  useEffect(() => {
-    const tick = () => {
-      const ctx = ctxRef.current;
-      if (playingRef.current && ctx) {
-        const t = offsetRef.current + (ctx.currentTime - startTimeRef.current) * playbackRate;
-        setCurrentTime(Math.min(t, duration));
-        if (t >= duration) {
-          playingRef.current = false;
-          setIsPlaying(false);
-          offsetRef.current = 0;
-          setCurrentTime(0);
-          stopSources();
-        }
-      }
-      animRef.current = requestAnimationFrame(tick);
-    };
-    animRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animRef.current);
-  }, [duration, playbackRate, stopSources]);
+  const togglePlay = useCallback(() => {
+    if (playingRef.current) pause();
+    else play();
+  }, [pause, play]);
 
   useEffect(() => {
     gainsRef.current.forEach((gainNode, name) => {
-      const ch = channels.find((c) => c.name === name);
-      if (ch) gainNode.gain.value = getEffectiveGain(ch, channels);
+      const channel = channels.find((item) => item.name === name);
+      if (channel) gainNode.gain.value = getEffectiveGain(channel, channels);
     });
   }, [channels, getEffectiveGain]);
 
   useEffect(() => {
-    if (playingRef.current) {
-      const wasPlaying = true;
-      const t = offsetRef.current;
+    const previousRate = rateRef.current;
+    if (previousRate === playbackRate) return;
+
+    const context = ctxRef.current;
+    let resumeAt = offsetRef.current;
+    if (playingRef.current && context) {
+      resumeAt = Math.min(
+        offsetRef.current + (context.currentTime - startTimeRef.current) * previousRate,
+        duration,
+      );
       stopSources();
       playingRef.current = false;
-      if (wasPlaying) play(t);
     }
-  }, [playbackRate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    rateRef.current = playbackRate;
+    offsetRef.current = resumeAt;
+    setCurrentTime(resumeAt);
+    if (isPlaying) startSources(resumeAt);
+  }, [duration, isPlaying, playbackRate, startSources, stopSources]);
+
+  useEffect(() => {
+    const tick = () => {
+      const context = ctxRef.current;
+      if (playingRef.current && context) {
+        const time = offsetRef.current + (context.currentTime - startTimeRef.current) * rateRef.current;
+        if (time >= duration && duration > 0) {
+          stopSources();
+          playingRef.current = false;
+          offsetRef.current = 0;
+          setIsPlaying(false);
+          setCurrentTime(0);
+        } else {
+          setCurrentTime(Math.min(time, duration || time));
+        }
+      }
+      animRef.current = requestAnimationFrame(tick);
+    };
+
+    animRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [duration, stopSources]);
+
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      stopSources();
+      const context = ctxRef.current;
+      if (context && context.state !== "closed") void context.close();
+    };
+  }, [stopSources]);
 
   return {
     currentTime,
     duration,
     isPlaying,
     loaded,
+    loadError,
     play,
     pause,
     seek,
-    togglePlay: () => (isPlaying ? pause() : play()),
+    togglePlay,
   };
 }

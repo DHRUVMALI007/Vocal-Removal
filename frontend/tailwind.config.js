@@ -5,15 +5,15 @@ export default {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "#0a0a0f",
-          card: "#12121a",
-          elevated: "#1a1a26",
-          border: "#2a2a3d",
+          DEFAULT: "#070910",
+          card: "#0d111d",
+          elevated: "#151b2b",
+          border: "#26314a",
         },
         accent: {
-          DEFAULT: "#8b5cf6",
-          light: "#a78bfa",
-          dark: "#7c3aed",
+          DEFAULT: "#8b7cff",
+          light: "#a996ff",
+          dark: "#6d4df2",
         },
       },
     },

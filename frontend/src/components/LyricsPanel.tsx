@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LyricLine, PlaybackSpeed } from "@/lib/types";
 import { PLAYBACK_SPEEDS } from "@/lib/types";
 
@@ -21,6 +21,12 @@ interface LyricsPanelProps {
   onSpeedChange: (speed: PlaybackSpeed) => void;
 }
 
+function formatTime(time: number) {
+  const minutes = Math.floor(time / 60);
+  const seconds = Math.floor(time % 60);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export default function LyricsPanel({
   lines,
   currentTime,
@@ -37,12 +43,14 @@ export default function LyricsPanel({
   onToggleVocals,
   onSpeedChange,
 }: LyricsPanelProps) {
-  const activeRef = useRef<HTMLDivElement>(null);
-  const loopStartRef = useRef<number | null>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+  const [loopMode, setLoopMode] = useState(false);
+  const [pendingLoopStart, setPendingLoopStart] = useState<number | null>(null);
 
   const activeIndex = hasAudio
-    ? lines.findIndex((l) => currentTime >= l.start && currentTime < l.end)
+    ? lines.findIndex((line) => currentTime >= line.start && currentTime < line.end)
     : -1;
+  const activeLine = activeIndex >= 0 ? lines[activeIndex] : null;
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -50,106 +58,149 @@ export default function LyricsPanel({
 
   const handleLineClick = (line: LyricLine) => {
     if (!hasAudio) return;
-    if (loopStartRef.current === null) {
-      loopStartRef.current = line.start;
-    } else {
-      const start = loopStartRef.current;
-      const end = line.end;
-      onSetLoop(start < end ? { start, end } : { start: end, end: start });
-      loopStartRef.current = null;
-    }
     onSeek(line.start);
+
+    if (!loopMode) return;
+    if (pendingLoopStart === null) {
+      setPendingLoopStart(line.start);
+      return;
+    }
+
+    const start = Math.min(pendingLoopStart, line.start);
+    const end = Math.max(pendingLoopStart, line.end);
+    onSetLoop({ start, end });
+    setPendingLoopStart(null);
+    setLoopMode(false);
+  };
+
+  const clearLoop = () => {
+    setPendingLoopStart(null);
+    setLoopMode(false);
+    onSetLoop(null);
   };
 
   return (
-    <div className="card flex h-full flex-col">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto text-sm font-semibold uppercase tracking-wider text-gray-400">Lyrics</h3>
-
-        {hasVocals && hasInstrumental && (
-          <button
-            type="button"
-            onClick={onToggleKaraoke}
-            className={`btn-secondary text-xs ${karaokeMode ? "border-accent text-accent-light" : ""}`}
-          >
-            {karaokeMode ? "Karaoke ON" : "Karaoke OFF"}
-          </button>
-        )}
-
-        {hasVocals && (
-          <button
-            type="button"
-            onClick={onToggleVocals}
-            className={`btn-secondary text-xs ${!vocalsMuted ? "border-pink-500/50 text-pink-400" : ""}`}
-            title="Toggle reference vocals"
-          >
-            {vocalsMuted ? "Vocals Off" : "Vocals On"}
-          </button>
-        )}
+    <section className="rounded-[2rem] border border-white/[0.08] bg-[#0d111d]/[0.85] p-5 shadow-xl sm:p-6">
+      <div className="flex flex-col gap-4 border-b border-white/5 pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Lyrics practice</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">Follow the vocal timeline</h2>
+          </div>
+          {hasVocals && hasInstrumental && (
+            <button
+              type="button"
+              onClick={onToggleKaraoke}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                karaokeMode
+                  ? "border-violet-400/25 bg-violet-500/10 text-violet-200"
+                  : "border-white/[0.08] bg-white/[0.025] text-slate-400 hover:text-white"
+              }`}
+            >
+              {karaokeMode ? "Karaoke on" : "Karaoke off"}
+            </button>
+          )}
+        </div>
 
         {hasAudio && (
-          <div className="flex gap-1">
-            {PLAYBACK_SPEEDS.map((s) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {hasVocals && (
               <button
-                key={s}
                 type="button"
-                onClick={() => onSpeedChange(s)}
-                className={`rounded px-2 py-1 text-xs ${playbackSpeed === s ? "bg-accent text-white" : "bg-surface-border text-gray-400"}`}
+                onClick={onToggleVocals}
+                className={`practice-control ${!vocalsMuted ? "border-pink-400/25 bg-pink-400/10 text-pink-200" : ""}`}
+                title="Toggle the reference vocal stem"
               >
-                {s}x
+                {vocalsMuted ? "Reference vocal off" : "Reference vocal on"}
               </button>
-            ))}
-          </div>
-        )}
+            )}
 
-        {hasAudio && loopRange && (
-          <button type="button" onClick={() => onSetLoop(null)} className="btn-secondary text-xs text-red-400">
-            Clear Loop
-          </button>
+            <div className="flex items-center rounded-xl border border-white/[0.06] bg-black/10 p-1" role="group" aria-label="Playback speed">
+              {PLAYBACK_SPEEDS.map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  onClick={() => onSpeedChange(speed)}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                    playbackSpeed === speed ? "bg-white/[0.09] text-white" : "text-slate-500 hover:text-slate-200"
+                  }`}
+                >
+                  {speed}×
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLoopMode((current) => !current);
+                setPendingLoopStart(null);
+              }}
+              className={`practice-control ${loopMode ? "border-cyan-300/25 bg-cyan-300/[0.07] text-cyan-200" : ""}`}
+            >
+              {loopMode ? (pendingLoopStart === null ? "Pick loop start" : "Pick loop end") : "Loop section"}
+            </button>
+
+            {(loopRange || pendingLoopStart !== null) && (
+              <button type="button" onClick={clearLoop} className="practice-control text-red-300">Clear loop</button>
+            )}
+          </div>
         )}
       </div>
 
-      <p className="mb-2 text-xs text-gray-500">
-        {hasAudio
-          ? "Click a line to seek. Click two lines to set a loop range."
-          : "Lyrics-only result. Select an audio output next time to enable synchronized playback."}
-      </p>
+      <div className="mt-5 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-violet-500/[0.075] to-cyan-400/[0.035] px-5 py-5 text-center">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+          {activeLine ? `Now · ${formatTime(activeLine.start)}` : hasAudio ? "Ready for playback" : "Transcription"}
+        </p>
+        <p className={`mt-2 min-h-12 text-lg font-semibold leading-7 ${activeLine ? "text-white" : "text-slate-500"}`}>
+          {activeLine?.text || (hasAudio ? "Press play and the current lyric will appear here." : "Lyrics are available below without synchronized audio playback.")}
+        </p>
+      </div>
 
-      <div className="flex-1 overflow-y-auto pr-1" style={{ maxHeight: "400px" }}>
+      {loopRange && (
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-cyan-300/10 bg-cyan-300/[0.035] px-3 py-2 text-xs text-cyan-100/80">
+          <span>Looping {formatTime(loopRange.start)} → {formatTime(loopRange.end)}</span>
+          <button type="button" onClick={clearLoop} className="font-medium text-cyan-200 hover:text-white">Clear</button>
+        </div>
+      )}
+
+      <div className="lyrics-scroll mt-4 max-h-[410px] space-y-1 overflow-y-auto pr-1">
         {lines.length === 0 ? (
-          <p className="text-sm text-gray-500">No lyrics detected.</p>
+          <div className="rounded-xl border border-white/5 bg-black/10 px-4 py-8 text-center text-sm text-slate-500">No lyrics were detected for this track.</div>
         ) : (
-          lines.map((line, i) => {
-            const isActive = i === activeIndex;
+          lines.map((line, index) => {
+            const active = index === activeIndex;
+            const loopStart = pendingLoopStart === line.start;
             return (
-              <div
-                key={`${line.start}-${i}`}
-                ref={isActive ? activeRef : undefined}
-                role={hasAudio ? "button" : undefined}
-                tabIndex={hasAudio ? 0 : undefined}
+              <button
+                key={`${line.start}-${index}`}
+                ref={active ? activeRef : undefined}
+                type="button"
+                disabled={!hasAudio}
                 onClick={() => handleLineClick(line)}
-                onKeyDown={(e) => e.key === "Enter" && handleLineClick(line)}
-                className={`rounded-lg px-3 py-2 text-base transition ${
-                  hasAudio ? "cursor-pointer" : ""
-                } ${
-                  isActive
-                    ? "bg-gradient-to-r from-accent/30 to-blue-500/20 font-semibold text-white"
-                    : "text-gray-400 hover:bg-surface-elevated hover:text-gray-200"
-                }`}
+                className={`group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                  active
+                    ? "bg-white/[0.07] text-white"
+                    : loopStart
+                      ? "bg-cyan-300/[0.06] text-cyan-100"
+                      : "text-slate-500 hover:bg-white/[0.035] hover:text-slate-300"
+                } ${hasAudio ? "cursor-pointer" : "cursor-default"}`}
               >
-                <span className="mr-2 text-xs text-gray-600">{formatTime(line.start)}</span>
-                {line.text}
-              </div>
+                <span className={`mt-0.5 w-10 shrink-0 font-mono text-[10px] tabular-nums ${active ? "text-violet-300" : "text-slate-700"}`}>{formatTime(line.start)}</span>
+                <span className="text-sm leading-6">{line.text}</span>
+              </button>
             );
           })
         )}
       </div>
-    </div>
-  );
-}
 
-function formatTime(t: number) {
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+      <p className="mt-4 border-t border-white/5 pt-4 text-xs leading-5 text-slate-600">
+        {hasAudio
+          ? loopMode
+            ? "Loop mode is armed: choose the start lyric, then the ending lyric."
+            : "Click any lyric to seek directly to that line."
+          : "Choose an audio stem on your next session to enable seek, loop, karaoke, and speed controls."}
+      </p>
+    </section>
+  );
 }
