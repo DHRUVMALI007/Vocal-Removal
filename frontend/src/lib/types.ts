@@ -1,6 +1,6 @@
 export type JobStatus = "created" | "queued" | "processing" | "completed" | "failed";
 
-export type ProcessingStep = "upload" | "normalize" | "separate" | "transcribe" | "finalize";
+export type ProcessingStep = "upload" | "normalize" | "separate" | "instrumental" | "transcribe" | "lyrics" | "finalize";
 
 export interface StemInfo {
   name: string;

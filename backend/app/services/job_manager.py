@@ -232,11 +232,32 @@ class JobManager:
             raise
 
     async def run_full_pipeline(self, job_id: str) -> None:
-        try:
+        async def _pipeline() -> None:
             await self.run_separation(job_id)
             await self.run_transcription(job_id)
+
+        try:
+            await asyncio.wait_for(
+                _pipeline(),
+                timeout=self.settings.processing_timeout_seconds,
+            )
+        except TimeoutError:
+            logger.error(
+                "Processing timed out for job %s after %s seconds",
+                job_id,
+                self.settings.processing_timeout_seconds,
+            )
+            meta = self.load_metadata(job_id)
+            if meta:
+                meta.status = JobStatus.FAILED
+                meta.error = (
+                    f"Processing timed out after "
+                    f"{self.settings.processing_timeout_seconds} seconds"
+                )
+                meta.message = "Processing timed out"
+                self.save_metadata(meta)
         except Exception:
-            pass  # error already saved in metadata
+            pass  # service methods already save the processing error in metadata
 
     def start_pipeline(self, job_id: str) -> None:
         if job_id in self._tasks and not self._tasks[job_id].done():

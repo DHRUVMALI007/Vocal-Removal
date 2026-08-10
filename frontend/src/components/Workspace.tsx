@@ -26,16 +26,22 @@ function buildChannels(results: JobResultsResponse, jobId: string): StemChannelS
 
 export default function Workspace({ jobId }: WorkspaceProps) {
   const [results, setResults] = useState<JobResultsResponse | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [channels, setChannels] = useState<StemChannelState[]>([]);
   const [karaokeMode, setKaraokeMode] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   const [loopRange, setLoopRange] = useState<{ start: number; end: number } | null>(null);
 
   useEffect(() => {
-    getJobResults(jobId).then((r) => {
-      setResults(r);
-      setChannels(buildChannels(r, jobId));
-    });
+    setLoadError(null);
+    getJobResults(jobId)
+      .then((r) => {
+        setResults(r);
+        setChannels(buildChannels(r, jobId));
+      })
+      .catch((err) => {
+        setLoadError(err instanceof Error ? err.message : "Could not load job results");
+      });
   }, [jobId]);
 
   const effectiveChannels = useMemo(() => {
@@ -75,6 +81,15 @@ export default function Workspace({ jobId }: WorkspaceProps) {
     );
     setKaraokeMode((k) => !k);
   };
+
+  if (loadError) {
+    return (
+      <div className="card mx-auto max-w-xl border-red-500/30 text-center">
+        <h2 className="mb-2 text-lg font-semibold text-red-400">Could not load results</h2>
+        <p className="text-sm text-gray-400">{loadError}</p>
+      </div>
+    );
+  }
 
   if (!results) {
     return (

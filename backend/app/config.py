@@ -1,9 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
 
-from functools import lru_cache
-from pathlib import Path
-
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,7 +21,7 @@ class Settings(BaseSettings):
     allowed_extensions: str = "mp3,wav,flac,m4a,ogg,aac"
     processing_timeout_seconds: int = 600
     cors_origins: str = Field(
-        default="http://localhost:5173",
+        default="http://localhost:3000",
         validation_alias=AliasChoices("ALLOWED_ORIGINS", "CORS_ORIGINS"),
     )
 

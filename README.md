@@ -24,7 +24,7 @@ AI-powered music vocal removal, stem separation, lyrics transcription, and karao
 ## Architecture
 
 ```
-frontend/          Next.js + TypeScript + Tailwind + WaveSurfer.js
+frontend/          Vite + React + TypeScript + Tailwind + WaveSurfer.js
 backend/           FastAPI + Demucs + faster-whisper + FFmpeg
 temp/{job_id}/     Temporary job storage (no database)
 ```

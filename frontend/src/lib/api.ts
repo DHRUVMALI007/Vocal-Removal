@@ -51,12 +51,18 @@ export async function pollUntilComplete(
   jobId: string,
   onProgress?: (status: JobStatusResponse) => void,
   intervalMs = 2000,
+  timeoutMs = 10 * 60 * 1000,
 ): Promise<JobStatusResponse> {
+  const startedAt = Date.now();
+
   while (true) {
     const status = await getJobStatus(jobId);
     onProgress?.(status);
     if (status.status === "completed" || status.status === "failed") {
       return status;
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error("Processing timed out. Check the backend logs and try again.");
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
