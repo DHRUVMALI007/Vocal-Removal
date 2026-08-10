@@ -2,6 +2,13 @@ export type JobStatus = "created" | "queued" | "processing" | "completed" | "fai
 
 export type ProcessingStep = "upload" | "normalize" | "separate" | "instrumental" | "transcribe" | "lyrics" | "finalize";
 
+export type OutputStem = "vocals" | "drums" | "bass" | "other" | "instrumental";
+
+export interface SeparationOptions {
+  outputs: OutputStem[];
+  include_lyrics: boolean;
+}
+
 export interface StemInfo {
   name: string;
   label: string;

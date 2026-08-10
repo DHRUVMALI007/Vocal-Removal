@@ -15,6 +15,7 @@ from app.models.schemas import (
     JobResultsResponse,
     JobStatus,
     JobStatusResponse,
+    SeparationOptions,
 )
 from app.services.job_manager import get_job_manager
 from app.utils.security import is_safe_path, sanitize_filename, validate_extension, validate_mime
@@ -73,13 +74,16 @@ async def create_job(file: UploadFile = File(...)) -> JobCreateResponse:
 
 
 @router.post("/{job_id}/separate", response_model=JobStatusResponse)
-async def start_separation(job_id: str) -> JobStatusResponse:
+async def start_separation(
+    job_id: str,
+    options: SeparationOptions | None = None,
+) -> JobStatusResponse:
     meta = manager.load_metadata(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found")
     if meta.status in (JobStatus.PROCESSING, JobStatus.QUEUED):
         return _status_response(meta)
-    manager.start_pipeline(job_id)
+    manager.start_pipeline(job_id, options)
     meta = manager.load_metadata(job_id)
     return _status_response(meta)
 
@@ -89,8 +93,12 @@ async def start_transcription(job_id: str) -> JobStatusResponse:
     meta = manager.load_metadata(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found")
-    if not meta.stems:
-        raise HTTPException(status_code=400, detail="Run separation first")
+    vocals_path = manager.job_dir(job_id) / "stems" / "vocals.wav"
+    if not vocals_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Vocal stem is not available. Select Vocals or enable Lyrics when starting separation.",
+        )
     if meta.status == JobStatus.PROCESSING:
         return _status_response(meta)
 
@@ -128,6 +136,8 @@ async def get_results(job_id: str) -> JobResultsResponse:
             "separation_model": meta.separation_model,
             "transcription_model": meta.transcription_model,
             "original_filename": meta.original_filename,
+            "requested_outputs": meta.requested_outputs,
+            "include_lyrics": meta.include_lyrics,
         },
     )
 

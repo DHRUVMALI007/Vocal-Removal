@@ -4,7 +4,7 @@ import { useState } from "react";
 import UploadZone from "@/components/UploadZone";
 import Workspace from "@/components/Workspace";
 import { createJob, pollUntilComplete, startSeparation } from "@/lib/api";
-import type { JobStatusResponse } from "@/lib/types";
+import type { JobStatusResponse, SeparationOptions } from "@/lib/types";
 
 type AppPhase = "upload" | "processing" | "workspace";
 
@@ -14,14 +14,14 @@ export default function HomePage() {
   const [progress, setProgress] = useState<JobStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = async (file: File, options: SeparationOptions) => {
     setError(null);
     setPhase("processing");
 
     try {
       const { job_id } = await createJob(file);
       setJobId(job_id);
-      await startSeparation(job_id);
+      await startSeparation(job_id, options);
       const final = await pollUntilComplete(job_id, setProgress);
 
       if (final.status === "failed") {

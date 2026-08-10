@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
-import shutil
 import zipfile
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -18,13 +16,21 @@ DEMUCS_STEM_LABELS = {
     "other": "Other / Accompaniment",
 }
 
+CORE_STEMS = {"vocals", "drums", "bass", "other"}
+INSTRUMENTAL_SOURCE_STEMS = {"drums", "bass", "other"}
+
 
 class StemSeparator(ABC):
     """Interface for music source separation backends."""
 
     @abstractmethod
-    async def separate(self, input_path: Path, output_dir: Path) -> dict[str, Path]:
-        """Return mapping of stem name -> file path."""
+    async def separate(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        required_stems: set[str] | None = None,
+    ) -> dict[str, Path]:
+        """Return mapping of saved stem name -> file path."""
         ...
 
 
@@ -45,16 +51,40 @@ class DemucsSeparator(StemSeparator):
         except ImportError:
             return "cpu"
 
-    async def separate(self, input_path: Path, output_dir: Path) -> dict[str, Path]:
+    async def separate(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        required_stems: set[str] | None = None,
+    ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
         device = self._resolve_device()
-        logger.info("Running Demucs (%s) on %s [device=%s]", self.model_name, input_path, device)
+        logger.info(
+            "Running Demucs (%s) on %s [device=%s, save=%s]",
+            self.model_name,
+            input_path,
+            device,
+            sorted(required_stems) if required_stems is not None else "all",
+        )
 
         loop = asyncio.get_event_loop()
-        stems = await loop.run_in_executor(None, self._run_demucs, input_path, output_dir, device)
+        stems = await loop.run_in_executor(
+            None,
+            self._run_demucs,
+            input_path,
+            output_dir,
+            device,
+            required_stems,
+        )
         return stems
 
-    def _run_demucs(self, input_path: Path, output_dir: Path, device: str) -> dict[str, Path]:
+    def _run_demucs(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        device: str,
+        required_stems: set[str] | None,
+    ) -> dict[str, Path]:
         import torch
         import torchaudio
         from demucs.apply import apply_model
@@ -78,12 +108,16 @@ class DemucsSeparator(StemSeparator):
         wav = wav.unsqueeze(0).to(device)
 
         with torch.no_grad():
+            # HTDemucs computes its four sources together. We only save the
+            # sources needed for the user's requested outputs or internal steps.
             sources = apply_model(model, wav, device=device, progress=False)[0]
 
         stem_names = model.sources  # ['drums', 'bass', 'other', 'vocals']
         result: dict[str, Path] = {}
 
         for i, name in enumerate(stem_names):
+            if required_stems is not None and name not in required_stems:
+                continue
             stem_wav = sources[i].cpu()
             out_path = output_dir / f"{name}.wav"
             torchaudio.save(str(out_path), stem_wav, model.samplerate)
@@ -97,7 +131,13 @@ def create_instrumental_stem(stem_paths: dict[str, Path], output_path: Path) -> 
     """Mix non-vocal stems into instrumental/karaoke track."""
     from app.services.ffmpeg_utils import mix_stems
 
-    non_vocal = [p for name, p in stem_paths.items() if name != "vocals"]
+    non_vocal = [
+        stem_paths[name]
+        for name in ("drums", "bass", "other")
+        if name in stem_paths
+    ]
+    if len(non_vocal) != 3:
+        raise RuntimeError("Instrumental requires drums, bass, and other stems")
     mix_stems(non_vocal, output_path)
     return output_path
 

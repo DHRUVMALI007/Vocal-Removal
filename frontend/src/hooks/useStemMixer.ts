@@ -23,6 +23,7 @@ export function useStemMixer({ channels, playbackRate = 1 }: UseStemMixerOptions
   const animRef = useRef<number>(0);
   const channelsRef = useRef(channels);
   channelsRef.current = channels;
+  const channelUrlKey = channels.map((ch) => `${ch.name}:${ch.url}`).join("|");
 
   const getCtx = useCallback(() => {
     if (!ctxRef.current) {
@@ -34,7 +35,7 @@ export function useStemMixer({ channels, playbackRate = 1 }: UseStemMixerOptions
   const loadBuffers = useCallback(async () => {
     const ctx = getCtx();
     let maxDuration = 0;
-    for (const ch of channels) {
+    for (const ch of channelsRef.current) {
       if (!ch.url) continue;
       try {
         const res = await fetch(ch.url);
@@ -48,7 +49,7 @@ export function useStemMixer({ channels, playbackRate = 1 }: UseStemMixerOptions
     }
     setDuration(maxDuration);
     setLoaded(true);
-  }, [channels, getCtx]);
+  }, [channelUrlKey, getCtx]);
 
   useEffect(() => {
     buffersRef.current.clear();

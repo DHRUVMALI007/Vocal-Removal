@@ -1,4 +1,4 @@
-import type { JobResultsResponse, JobStatusResponse } from "./types";
+import type { JobResultsResponse, JobStatusResponse, SeparationOptions } from "./types";
 
 export const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
@@ -23,8 +23,15 @@ export async function createJob(file: File): Promise<{ job_id: string; status: s
   return request("/api/jobs", { method: "POST", body: form });
 }
 
-export async function startSeparation(jobId: string): Promise<JobStatusResponse> {
-  return request(`/api/jobs/${jobId}/separate`, { method: "POST" });
+export async function startSeparation(
+  jobId: string,
+  options: SeparationOptions,
+): Promise<JobStatusResponse> {
+  return request(`/api/jobs/${jobId}/separate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
