@@ -14,7 +14,7 @@ export default function LyricsPanel({ lines, currentTime, onSeek, onSetLoop }) {
     );
   }
 
-  const handleClick = (line, index) => {
+  const handleClick = (line) => {
     if (loopStartRef.current === null) {
       loopStartRef.current = line.start;
     } else {

@@ -1,12 +1,18 @@
 import type { JobResultsResponse, JobStatusResponse } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, options);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, options);
+  } catch {
+    throw new Error("Cannot reach server. Is the backend running?");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `Request failed: ${res.status}`);
+    const detail = body.detail;
+    throw new Error(typeof detail === "string" ? detail : `Request failed (${res.status})`);
   }
   return res.json();
 }

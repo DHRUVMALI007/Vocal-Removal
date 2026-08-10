@@ -49,7 +49,7 @@ export async function deleteJob(jobId) {
 }
 
 export async function pollUntilComplete(jobId, onProgress, intervalMs = 2000) {
-  while (true) {
+  for (;;) {
     const status = await getJobStatus(jobId);
     onProgress?.(status);
     if (status.status === "completed" || status.status === "failed") return status;
