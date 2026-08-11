@@ -9,5 +9,6 @@ torch>=2.1.0
 torchaudio>=2.1.0
 torchcodec>=0.15.0
 faster-whisper>=1.0.0
+hindi-xlit==1.0.1
 ffmpeg-python>=0.2.0
 python-dotenv>=1.0.0

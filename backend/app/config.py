@@ -29,11 +29,13 @@ class Settings(BaseSettings):
     demucs_overlap: float = 0.15
     demucs_shifts: int = 0
     whisper_model: str = Field(default="base", validation_alias=AliasChoices("WHISPER_MODEL"))
+    whisper_indic_model: str = Field(default="large-v3", validation_alias=AliasChoices("WHISPER_INDIC_MODEL"))
     device: str = Field(default="auto", validation_alias=AliasChoices("AI_DEVICE", "DEVICE"))
     whisper_device: str = "auto"
     whisper_compute_type: str = "auto"
     whisper_language: str = ""
     whisper_beam_size: int = 1
+    whisper_indic_beam_size: int = 5
     whisper_vad_min_silence_ms: int = 500
     whisper_condition_on_previous_text: bool = False
 

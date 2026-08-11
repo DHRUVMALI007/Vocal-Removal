@@ -19,6 +19,11 @@ from app.models.schemas import (
 )
 from app.services.ffmpeg_utils import convert_to_wav, get_audio_duration
 from app.services.lyrics_formatter import export_lyrics
+from app.services.script_normalizer import (
+    hindi_native_script_score,
+    make_hindi_devanagari_lines,
+    needs_hindi_native_script_retry,
+)
 from app.services.stem_separator import (
     CORE_STEMS,
     DEMUCS_STEM_LABELS,
@@ -28,7 +33,11 @@ from app.services.stem_separator import (
     create_instrumental_stem,
     create_zip_archive,
 )
-from app.services.transcription_service import TranscriptionService, WhisperTranscriptionService
+from app.services.transcription_service import (
+    HINDI_RETRY_PROMPT,
+    TranscriptionService,
+    WhisperTranscriptionService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +58,11 @@ class JobManager:
         )
         self._transcriber: TranscriptionService = WhisperTranscriptionService(
             model_size=self.settings.whisper_model,
+            indic_model_size=self.settings.whisper_indic_model,
             device=self.settings.effective_whisper_device,
             compute_type=self.settings.whisper_compute_type,
             beam_size=self.settings.whisper_beam_size,
+            indic_beam_size=self.settings.whisper_indic_beam_size,
             vad_min_silence_ms=self.settings.whisper_vad_min_silence_ms,
             condition_on_previous_text=self.settings.whisper_condition_on_previous_text,
         )
@@ -242,7 +253,6 @@ class JobManager:
             meta.step = ProcessingStep.TRANSCRIBE
             meta.message = "Transcribing vocals literally"
             meta.progress = max(meta.progress, 80.0)
-            meta.transcription_model = self.settings.whisper_model
             self.save_metadata(meta)
 
             job_path = self.job_dir(job_id)
@@ -258,23 +268,54 @@ class JobManager:
             requested_language = meta.requested_language
             language = configured_language or requested_language
             language_label = {"en": "English", "hi": "Hindi", "gu": "Gujarati"}[language]
-            meta.message = f"Literal transcription · {language_label}"
+            meta.transcription_model = (
+                self.settings.whisper_indic_model
+                if language in {"hi", "gu"}
+                else self.settings.whisper_model
+            )
+            meta.message = f"High-quality transcription · {language_label}"
             self.save_metadata(meta)
 
-            # One literal ASR pass only. The selected language is passed directly to
-            # Whisper; this application does not auto-detect, translate, transliterate,
-            # or re-decode the lyrics into another language/script.
+            # First pass is literal ASR. Hindi/Gujarati use the configured high-
+            # accuracy Indic Whisper model, larger beam, and native-script context.
             transcription = await self._transcriber.transcribe(vocals_path, language=language)
             lines = transcription.lines
 
-            meta.detected_language = (
-                transcription.language if transcription.language in allowed_languages else language
-            )
+            # If Hindi still comes back mostly Roman or with Arabic/Urdu script,
+            # retry the same audio once with stronger Devanagari context. Keep the
+            # retry only when its script profile is objectively better.
+            if language == "hi" and lines and needs_hindi_native_script_retry(lines):
+                meta.message = "Improving Hindi Devanagari recognition"
+                meta.progress = max(meta.progress, 86.0)
+                self.save_metadata(meta)
+                retry = await self._transcriber.transcribe(
+                    vocals_path,
+                    language="hi",
+                    initial_prompt=HINDI_RETRY_PROMPT,
+                )
+                if retry.lines and hindi_native_script_score(retry.lines) > hindi_native_script_score(lines):
+                    transcription = retry
+                    lines = retry.lines
+
+            # Final Hindi-only script normalization. Correct Devanagari from Whisper
+            # is kept untouched. Remaining Roman/Hinglish words are transliterated
+            # locally with hindi-xlit; Arabic-script leakage is removed as a fallback.
+            if language == "hi" and lines:
+                meta.message = "Normalizing Hindi lyrics to Devanagari"
+                meta.progress = max(meta.progress, 89.0)
+                self.save_metadata(meta)
+                lines, _ = await asyncio.to_thread(make_hindi_devanagari_lines, lines)
+
+            # The selected language is authoritative because auto-detection is not
+            # part of this application. Whisper's probability is kept as diagnostics.
+            meta.detected_language = language
             meta.language_probability = transcription.language_probability
             meta.transcript_language_used = language
+            if transcription.model_name:
+                meta.transcription_model = transcription.model_name
 
             meta.step = ProcessingStep.LYRICS
-            meta.message = "Preparing synchronized literal lyrics"
+            meta.message = "Preparing synchronized lyrics"
             meta.progress = 92.0
             self.save_metadata(meta)
 
@@ -411,8 +452,26 @@ class JobManager:
         return True
 
     def ensure_hindi_safe_lyrics(self, job_id: str) -> JobMetadata | None:
-        """Legacy compatibility hook; lyrics are no longer converted or transliterated."""
-        return self.load_metadata(job_id)
+        """Normalize saved Hindi sessions to Devanagari before display/download."""
+        meta = self.load_metadata(job_id)
+        if not meta or not meta.lyrics or meta.requested_language != "hi":
+            return meta
+
+        lines, changed = make_hindi_devanagari_lines(meta.lyrics.lines)
+        if not changed:
+            return meta
+
+        meta.lyrics.lines = lines
+        job_path = self.job_dir(job_id)
+        files = export_lyrics(lines, job_path) if lines else {}
+        meta.lyrics.txt_file = files.get("txt_file")
+        meta.lyrics.srt_file = files.get("srt_file")
+        meta.lyrics.lrc_file = files.get("lrc_file")
+        meta.detected_language = "hi"
+        meta.transcript_language_used = "hi"
+        self.save_metadata(meta)
+        logger.info("Normalized saved Hindi lyrics to Devanagari for job %s", job_id)
+        return meta
 
     def build_download_urls(self, job_id: str) -> dict[str, str]:
         meta = self.load_metadata(job_id)

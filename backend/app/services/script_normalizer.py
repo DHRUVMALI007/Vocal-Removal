@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 
 from app.models.schemas import LyricLine
+
+logger = logging.getLogger(__name__)
 
 # Arabic-script blocks used by Urdu and related writing systems. The app keeps
 # English, Devanagari Hindi, and Gujarati untouched and converts only characters
@@ -181,3 +184,151 @@ def make_hindi_safe_lines(lines: list[LyricLine]) -> tuple[list[LyricLine], bool
         )
 
     return safe_lines, changed
+
+# Roman/Hinglish fallback used only when the user explicitly selected Hindi.
+# The AI4Bharat-based hindi-xlit model runs locally and converts phonetic Roman
+# words (for example "mera dil") to Devanagari without translating their meaning.
+_LATIN_WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)*")
+_HINDI_TRANSLITERATOR = None
+
+
+def _is_devanagari_letter(char: str) -> bool:
+    return 0x0900 <= ord(char) <= 0x097F and unicodedata.category(char).startswith("L")
+
+
+def _is_latin_letter(char: str) -> bool:
+    return char.isascii() and char.isalpha()
+
+
+def hindi_script_profile(lines: list[LyricLine]) -> tuple[int, int, int]:
+    """Return (Devanagari, Latin, Arabic) letter counts for Hindi quality checks."""
+    devanagari = 0
+    latin = 0
+    arabic = 0
+    for line in lines:
+        for char in line.text:
+            if _is_devanagari_letter(char):
+                devanagari += 1
+            elif _is_latin_letter(char):
+                latin += 1
+            elif _is_arabic_script_char(char) and unicodedata.category(char).startswith("L"):
+                arabic += 1
+    return devanagari, latin, arabic
+
+
+def needs_hindi_native_script_retry(lines: list[LyricLine]) -> bool:
+    """Retry Whisper when Hindi is mostly Roman or contains Arabic/Urdu letters."""
+    devanagari, latin, arabic = hindi_script_profile(lines)
+    if arabic:
+        return True
+    # A few English words in an otherwise Hindi song are fine. Retry only when
+    # Roman letters clearly dominate the transcript.
+    return latin >= 8 and latin > max(6, devanagari * 2)
+
+
+def hindi_native_script_score(lines: list[LyricLine]) -> int:
+    """Higher means the transcript is a better native-script Hindi candidate."""
+    devanagari, latin, arabic = hindi_script_profile(lines)
+    return (devanagari * 2) - latin - (arabic * 4)
+
+
+def _load_hindi_transliterator():
+    global _HINDI_TRANSLITERATOR
+    if _HINDI_TRANSLITERATOR is not None:
+        return _HINDI_TRANSLITERATOR
+
+    try:
+        from hindi_xlit import HindiTransliterator
+    except ImportError as exc:
+        raise RuntimeError(
+            "Hindi Devanagari normalization is not installed. "
+            "Run: python -m pip install -r backend/requirements.txt"
+        ) from exc
+
+    logger.info("Loading local Hindi transliteration model")
+    _HINDI_TRANSLITERATOR = HindiTransliterator()
+    return _HINDI_TRANSLITERATOR
+
+
+def _first_hindi_candidate(value) -> str | None:
+    if isinstance(value, dict):
+        value = value.get("hi") or next(iter(value.values()), None)
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, (list, tuple)) and value:
+        first = value[0]
+        return first.strip() if isinstance(first, str) and first.strip() else None
+    return None
+
+
+def _build_hindi_word_map(words: list[str]) -> dict[str, str]:
+    transliterator = _load_hindi_transliterator()
+    unique_words = list(dict.fromkeys(words))
+    converted: dict[str, str] = {}
+
+    # Batch inference is substantially faster for a full song. Fall back to the
+    # single-word API if a package version does not expose batch transliteration.
+    batch_method = getattr(transliterator, "transliterate_batch", None)
+    if callable(batch_method):
+        try:
+            batch_results = batch_method(unique_words)
+            if len(batch_results) == len(unique_words):
+                for word, result in zip(unique_words, batch_results):
+                    candidate = _first_hindi_candidate(result)
+                    if candidate:
+                        converted[word] = candidate
+        except Exception:
+            logger.exception(
+                "Batch Hindi transliteration failed; retrying word by word"
+            )
+
+    single_method = getattr(transliterator, "transliterate", None)
+    if not callable(single_method):
+        raise RuntimeError("Installed hindi-xlit package does not expose transliterate()")
+
+    for word in unique_words:
+        if word in converted:
+            continue
+        candidate = _first_hindi_candidate(single_method(word))
+        if not candidate:
+            raise RuntimeError(f"Could not convert Roman Hindi word to Devanagari: {word}")
+        converted[word] = candidate
+
+    return converted
+
+
+def make_hindi_devanagari_lines(lines: list[LyricLine]) -> tuple[list[LyricLine], bool]:
+    """Normalize selected Hindi lyrics to readable Devanagari only.
+
+    Arabic/Urdu script is first removed with the deterministic safety mapping.
+    Any remaining Roman words are then transliterated locally with hindi-xlit.
+    Existing Devanagari, timestamps, punctuation and numbers are preserved.
+    """
+    safe_texts = [to_hindi_safe_text(line.text) for line in lines]
+    roman_words = [
+        match.group(0)
+        for text in safe_texts
+        for match in _LATIN_WORD_RE.finditer(text)
+    ]
+    word_map = _build_hindi_word_map(roman_words) if roman_words else {}
+
+    changed = False
+    normalized_lines: list[LyricLine] = []
+    for line, safe_text in zip(lines, safe_texts):
+        normalized = _LATIN_WORD_RE.sub(lambda match: word_map[match.group(0)], safe_text)
+        normalized = _WHITESPACE_RE.sub(" ", normalized).strip()
+        changed = changed or normalized != line.text
+        normalized_lines.append(
+            LyricLine(start=line.start, end=line.end, text=normalized)
+        )
+
+    # Do not silently leak another writing system after Hindi was selected.
+    devanagari, latin, arabic = hindi_script_profile(normalized_lines)
+    if latin or arabic:
+        raise RuntimeError(
+            "Hindi normalization left unsupported script characters in the lyrics"
+        )
+    if normalized_lines and devanagari == 0:
+        raise RuntimeError("Hindi lyrics could not be normalized to Devanagari")
+
+    return normalized_lines, changed
