@@ -142,6 +142,11 @@ async def get_results(job_id: str) -> JobResultsResponse:
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Repair old saved sessions before anything reaches the client. New jobs are
+    # already normalized during transcription, but this also protects existing
+    # metadata and lyric files created by older versions.
+    meta = manager.ensure_hindi_safe_lyrics(job_id) or meta
+
     return JobResultsResponse(
         job_id=job_id,
         status=meta.status,
@@ -158,7 +163,7 @@ async def get_results(job_id: str) -> JobResultsResponse:
             "requested_language": meta.requested_language,
             "detected_language": "hi" if meta.detected_language == "ur" else meta.detected_language,
             "language_probability": meta.language_probability,
-            "transcript_language_used": meta.transcript_language_used,
+            "transcript_language_used": "hi" if meta.transcript_language_used == "ur" else meta.transcript_language_used,
             "literal_transcription": True,
         },
     )
@@ -169,6 +174,10 @@ async def download_file(job_id: str, filename: str) -> FileResponse:
     meta = manager.load_metadata(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Direct lyric/ZIP downloads get the same Hindi-script safety repair even if
+    # the user did not open the Studio results page first.
+    manager.ensure_hindi_safe_lyrics(job_id)
 
     safe_name = Path(filename).name
     file_path = manager.get_downloadable_file(job_id, safe_name)

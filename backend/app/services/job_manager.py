@@ -19,6 +19,11 @@ from app.models.schemas import (
 )
 from app.services.ffmpeg_utils import convert_to_wav, get_audio_duration
 from app.services.lyrics_formatter import export_lyrics
+from app.services.script_normalizer import (
+    contains_arabic_script,
+    lines_contain_arabic_letters,
+    make_hindi_safe_lines,
+)
 from app.services.stem_separator import (
     CORE_STEMS,
     DEMUCS_STEM_LABELS,
@@ -261,40 +266,52 @@ class JobManager:
             # task=transcribe, so this application does not translate, rewrite,
             # summarize, or grammar-correct the recognized words.
             transcription = await self._transcriber.transcribe(vocals_path, language=language)
-            display_transcription = transcription
+            display_lines = transcription.lines
 
-            meta.detected_language = transcription.language
+            # Do not trust only Whisper's language label here. It can occasionally
+            # identify closely related speech as Hindi while still emitting some
+            # Arabic-script lyric lines. Inspect the actual returned characters.
+            needs_hindi_script = (
+                transcription.language == "ur"
+                or lines_contain_arabic_letters(transcription.lines)
+            )
+
+            meta.detected_language = "hi" if needs_hindi_script else transcription.language
             meta.language_probability = transcription.language_probability
-            meta.transcript_language_used = language or transcription.language
+            meta.transcript_language_used = (
+                "hi" if needs_hindi_script else (language or transcription.language)
+            )
 
-            # Auto detection can be ambiguous for closely related Hindustani
-            # speech. Product behavior is intentionally Hindi-first: if that
-            # alternate language code is detected, perform a second literal ASR
-            # pass with the Hindi token and never expose the first-pass script.
-            force_hindi = language is None and transcription.language == "ur"
-            if force_hindi:
-                meta.message = "Ambiguous speech detected · preparing Hindi-script lyrics"
+            if needs_hindi_script:
+                meta.message = "Preparing Hindi-script lyrics"
                 meta.progress = max(meta.progress, 86.0)
-                meta.transcript_language_used = "hi"
                 self.save_metadata(meta)
                 try:
                     hindi_transcription = await self._transcriber.transcribe(
                         vocals_path,
                         language="hi",
                     )
-                    display_transcription = hindi_transcription if hindi_transcription.lines else None
-                    if display_transcription is None:
+                    if hindi_transcription.lines:
+                        display_lines = hindi_transcription.lines
+                    else:
                         logger.warning(
-                            "Hindi-script re-decode returned no lines for job %s",
+                            "Hindi-script re-decode returned no lines for job %s; "
+                            "using script-safe fallback",
                             job_id,
                         )
                 except Exception:
-                    # Never fall back to displaying the alternate script. A job can
-                    # still complete with stems if the Hindi re-decode fails.
+                    # Keep the literal first-pass words as the fallback, but convert
+                    # their script below so Arabic/Urdu characters are never exposed.
                     logger.exception("Hindi-script re-decode failed for job %s", job_id)
-                    display_transcription = None
 
-            lines = display_transcription.lines if display_transcription is not None else []
+            # Final no-leak guarantee. Usually the Hindi re-decode already returns
+            # Devanagari. Any residual Arabic-script characters are transliterated
+            # without touching English, Devanagari Hindi, or Gujarati text.
+            lines, script_changed = make_hindi_safe_lines(display_lines)
+            if script_changed:
+                meta.detected_language = "hi"
+                meta.transcript_language_used = "hi"
+                logger.info("Converted residual Arabic-script lyrics to Hindi for job %s", job_id)
 
             meta.step = ProcessingStep.LYRICS
             meta.message = "Preparing synchronized literal lyrics"
@@ -433,6 +450,66 @@ class JobManager:
             task.cancel()
         logger.info("Deleted job %s", job_id)
         return True
+
+    def ensure_hindi_safe_lyrics(self, job_id: str) -> JobMetadata | None:
+        """Repair old saved sessions so no Arabic/Urdu script reaches results/downloads."""
+        meta = self.load_metadata(job_id)
+        if not meta or not meta.lyrics:
+            return meta
+
+        safe_lines, lines_changed = make_hindi_safe_lines(meta.lyrics.lines)
+        job_path = self.job_dir(job_id)
+
+        files_contain_arabic = False
+        for filename in (
+            meta.lyrics.txt_file,
+            meta.lyrics.srt_file,
+            meta.lyrics.lrc_file,
+        ):
+            if not filename:
+                continue
+            path = job_path / filename
+            if not path.exists():
+                continue
+            try:
+                if contains_arabic_script(path.read_text(encoding="utf-8")):
+                    files_contain_arabic = True
+                    break
+            except (OSError, UnicodeError):
+                logger.warning("Could not inspect lyric file for job %s: %s", job_id, path)
+
+        metadata_needs_repair = (
+            meta.detected_language == "ur"
+            or meta.transcript_language_used == "ur"
+            or bool(meta.lyrics.original_lines)
+            or bool(meta.lyrics.original_txt_file)
+            or bool(meta.lyrics.original_srt_file)
+            or bool(meta.lyrics.original_lrc_file)
+        )
+
+        if not (lines_changed or files_contain_arabic or metadata_needs_repair):
+            return meta
+
+        meta.lyrics.lines = safe_lines
+        meta.lyrics.original_lines = []
+        meta.lyrics.original_txt_file = None
+        meta.lyrics.original_srt_file = None
+        meta.lyrics.original_lrc_file = None
+
+        if safe_lines:
+            files = export_lyrics(safe_lines, job_path)
+            meta.lyrics.txt_file = files.get("txt_file")
+            meta.lyrics.srt_file = files.get("srt_file")
+            meta.lyrics.lrc_file = files.get("lrc_file")
+
+        if lines_changed or meta.detected_language == "ur":
+            meta.detected_language = "hi"
+        if lines_changed or meta.transcript_language_used == "ur":
+            meta.transcript_language_used = "hi"
+
+        self.save_metadata(meta)
+        logger.info("Repaired Hindi-safe lyrics for saved job %s", job_id)
+        return meta
 
     def build_download_urls(self, job_id: str) -> dict[str, str]:
         meta = self.load_metadata(job_id)

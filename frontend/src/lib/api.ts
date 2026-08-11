@@ -1,4 +1,5 @@
 import type { JobResultsResponse, JobStatusResponse, SeparationOptions } from "./types";
+import { makeResultsHindiSafe } from "./scriptSafety";
 
 export const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
@@ -77,7 +78,10 @@ export async function getJobStatus(jobId: string, signal?: AbortSignal): Promise
 }
 
 export async function getJobResults(jobId: string): Promise<JobResultsResponse> {
-  return request(`/api/jobs/${jobId}/results`);
+  const results = await request<JobResultsResponse>(`/api/jobs/${jobId}/results`);
+  // Defense in depth for cached/older API responses: never render Arabic/Urdu
+  // script in Studio even if a stale backend result somehow contains it.
+  return makeResultsHindiSafe(results);
 }
 
 export function getDownloadUrl(jobId: string, filename: string): string {
