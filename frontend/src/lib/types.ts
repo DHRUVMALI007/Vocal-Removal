@@ -3,7 +3,7 @@ export type JobStatus = "created" | "queued" | "processing" | "completed" | "fai
 export type ProcessingStep = "upload" | "normalize" | "separate" | "instrumental" | "transcribe" | "lyrics" | "finalize";
 
 export type OutputStem = "vocals" | "drums" | "bass" | "other" | "instrumental";
-export type TranscriptionLanguage = "auto" | "en" | "hi" | "gu";
+export type TranscriptionLanguage = "en" | "hi" | "gu";
 export type PracticeTarget = "mix" | "vocals" | "drums" | "bass" | "other";
 
 export interface SeparationOptions {

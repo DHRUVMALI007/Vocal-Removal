@@ -25,8 +25,7 @@ class ProcessingStep(str, Enum):
 
 
 StemOutputName = Literal["vocals", "drums", "bass", "other", "instrumental"]
-TranscriptionLanguage = Literal["auto", "en", "hi", "gu"]
-UrduScriptFallback = Literal["none", "hi", "gu"]
+TranscriptionLanguage = Literal["en", "hi", "gu"]
 DEFAULT_OUTPUTS: list[StemOutputName] = [
     "vocals",
     "drums",
@@ -39,10 +38,7 @@ DEFAULT_OUTPUTS: list[StemOutputName] = [
 class SeparationOptions(BaseModel):
     outputs: list[StemOutputName] = Field(default_factory=lambda: list(DEFAULT_OUTPUTS))
     include_lyrics: bool = True
-    transcription_language: TranscriptionLanguage = "auto"
-    # Backward-compatible metadata field. Auto mode now always prefers a
-    # Hindi-script recognition pass when language detection is ambiguous.
-    urdu_script_fallback: UrduScriptFallback = "hi"
+    transcription_language: TranscriptionLanguage = "en"
 
     @model_validator(mode="after")
     def validate_selection(self) -> "SeparationOptions":
@@ -50,8 +46,6 @@ class SeparationOptions(BaseModel):
         self.outputs = list(dict.fromkeys(self.outputs))
         if not self.outputs and not self.include_lyrics:
             raise ValueError("Select at least one stem or enable lyrics")
-        if self.transcription_language != "auto":
-            self.urdu_script_fallback = "none"
         return self
 
 
@@ -99,8 +93,7 @@ class JobMetadata(BaseModel):
     transcription_model: str | None = None
     requested_outputs: list[StemOutputName] = Field(default_factory=lambda: list(DEFAULT_OUTPUTS))
     include_lyrics: bool = True
-    requested_language: TranscriptionLanguage = "auto"
-    urdu_script_fallback: UrduScriptFallback = "none"
+    requested_language: TranscriptionLanguage = "en"
     detected_language: str | None = None
     language_probability: float | None = None
     transcript_language_used: str | None = None

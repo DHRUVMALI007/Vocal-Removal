@@ -16,7 +16,6 @@ interface WorkspaceProps {
 
 const DETAIL_STEMS = new Set(["drums", "bass", "other"]);
 const LANGUAGE_LABELS: Record<string, string> = {
-  auto: "Auto detect",
   en: "English",
   hi: "Hindi",
   gu: "Gujarati",
@@ -284,15 +283,14 @@ export default function Workspace({ jobId, onNewSong }: WorkspaceProps) {
   const waveformUrl = waveformStem ? getStemAudioUrl(jobId, waveformStem.filename) : "";
   const vocalsMuted = channels.find((channel) => channel.name === "vocals")?.muted ?? true;
   const trackName = typeof results.metadata.original_filename === "string" ? results.metadata.original_filename : "Processed track";
-  const requestedLanguage = typeof results.metadata.requested_language === "string" ? results.metadata.requested_language : "auto";
+  const requestedLanguage = typeof results.metadata.requested_language === "string" ? results.metadata.requested_language : null;
   const detectedLanguage = typeof results.metadata.detected_language === "string" ? results.metadata.detected_language : null;
   const transcriptLanguageUsed = typeof results.metadata.transcript_language_used === "string" ? results.metadata.transcript_language_used : null;
   const languageProbability = typeof results.metadata.language_probability === "number" ? results.metadata.language_probability : null;
-  const effectiveLanguage = transcriptLanguageUsed || detectedLanguage || (requestedLanguage !== "auto" ? requestedLanguage : null);
-  // Older sessions can contain an ambiguous auto-detected language code. The
-  // product preference is Hindi display, so never surface that alternate script.
-  const displayLanguage = effectiveLanguage === "ur" ? "hi" : effectiveLanguage;
-  const languageLabel = displayLanguage ? (LANGUAGE_LABELS[displayLanguage] || "Hindi") : "Auto detect";
+  const effectiveLanguage = [transcriptLanguageUsed, requestedLanguage, detectedLanguage].find(
+    (language): language is string => Boolean(language && LANGUAGE_LABELS[language]),
+  );
+  const languageLabel = effectiveLanguage ? LANGUAGE_LABELS[effectiveLanguage] : "English / Hindi / Gujarati";
 
   return (
     <div className="space-y-4 sm:space-y-5 xl:space-y-6">

@@ -9,6 +9,8 @@ from app.models.schemas import LyricLine
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_TRANSCRIPTION_LANGUAGES = frozenset({"en", "hi", "gu"})
+
 
 @dataclass(slots=True)
 class TranscriptionResult:
@@ -82,12 +84,15 @@ class WhisperTranscriptionService(TranscriptionService):
         return await loop.run_in_executor(None, self._transcribe_sync, audio_path, language)
 
     def _transcribe_sync(self, audio_path: Path, language: str | None) -> TranscriptionResult:
+        if language not in SUPPORTED_TRANSCRIPTION_LANGUAGES:
+            raise ValueError("Lyrics language must be one of: en, hi, gu")
+
         model = self._get_model()
         logger.info(
             "Transcribing %s with Whisper (%s, language=%s, beam=%d)",
             audio_path,
             self.model_size,
-            language or "auto",
+            language,
             self.beam_size,
         )
 
@@ -106,8 +111,7 @@ class WhisperTranscriptionService(TranscriptionService):
             "vad_parameters": {"min_silence_duration_ms": self.vad_min_silence_ms},
             "condition_on_previous_text": self.condition_on_previous_text,
         }
-        if language:
-            kwargs["language"] = language
+        kwargs["language"] = language
 
         segments, info = model.transcribe(str(audio_path), **kwargs)
         lines: list[LyricLine] = []

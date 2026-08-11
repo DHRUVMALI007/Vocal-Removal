@@ -22,7 +22,6 @@ const OUTPUTS: Array<{ name: OutputStem; label: string; help: string; accent: st
 const DEFAULT_OUTPUTS: OutputStem[] = ["vocals", "instrumental"];
 
 const LANGUAGES: Array<{ code: TranscriptionLanguage; label: string; native: string; help: string }> = [
-  { code: "auto", label: "Auto detect", native: "Smart", help: "Best for mixed or unknown language" },
   { code: "en", label: "English", native: "English", help: "Skip detection for English songs" },
   { code: "hi", label: "Hindi", native: "हिन्दी", help: "Hindi and Hinglish-focused songs" },
   { code: "gu", label: "Gujarati", native: "ગુજરાતી", help: "Gujarati-focused songs" },
@@ -39,7 +38,7 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
   const [error, setError] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<OutputStem[]>(DEFAULT_OUTPUTS);
   const [includeLyrics, setIncludeLyrics] = useState(true);
-  const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>("auto");
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>("en");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const validate = useCallback(
@@ -109,7 +108,7 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
     onUpload(pendingFile, {
       outputs,
       include_lyrics: includeLyrics,
-      transcription_language: includeLyrics ? transcriptionLanguage : "auto",
+      transcription_language: transcriptionLanguage,
     });
   };
 
@@ -209,16 +208,16 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Lyric language</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">Choose a language when you know it. Auto detect still works for mixed or unknown songs.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Choose exactly one lyrics language: English, Hindi, or Gujarati.</p>
             </div>
-            {includeLyrics && transcriptionLanguage !== "auto" && (
+            {includeLyrics && (
               <span className="w-fit rounded-full border border-emerald-300/10 bg-emerald-300/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200">
                 Faster hint
               </span>
             )}
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
             {LANGUAGES.map((language) => {
               const active = transcriptionLanguage === language.code;
               return (
@@ -241,14 +240,6 @@ export default function UploadZone({ onUpload, disabled }: UploadZoneProps) {
             })}
           </div>
 
-          {includeLyrics && transcriptionLanguage === "auto" && (
-            <div className="mt-4 rounded-xl border border-emerald-300/10 bg-emerald-300/[0.025] p-3 sm:p-4">
-              <p className="text-xs font-semibold text-emerald-100">Hindi-safe Auto mode</p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                Auto detection stays enabled. If closely related speech is ambiguous, Studio automatically performs a Hindi-script recognition pass before lyrics are shown.
-              </p>
-            </div>
-          )}
 
         </div>
 
